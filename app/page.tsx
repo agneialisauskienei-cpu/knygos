@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { booksSeed } from "./books-data";
+import { senaSales, senaUnmatchedSales } from "./sena-sales";
 import { agneali1990UnmatchedSales, agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const APP_PASSWORD = "knygos2026";
@@ -116,17 +117,30 @@ type MarketplaceProduct = {
   url: string;
 };
 
-const salesSeed: Sale[] = agneali1990VintedSales.map((sale, index) => ({
-  id: `agneali1990-${index}-${sale.bookId}`,
-  bookId: sale.bookId,
-  platform: "Vinted",
-  soldAt: "2026-08-12",
-  quantity: 1,
-  salePrice: sale.price,
-  purchaseCost: 0,
-  fees: 0,
-  packing: 0,
-}));
+const salesSeed: Sale[] = [
+  ...agneali1990VintedSales.map((sale, index) => ({
+    id: `agneali1990-${index}-${sale.bookId}`,
+    bookId: sale.bookId,
+    platform: "Vinted" as Platform,
+    soldAt: "2026-08-12",
+    quantity: 1,
+    salePrice: sale.price,
+    purchaseCost: 0,
+    fees: 0,
+    packing: 0,
+  })),
+  ...senaSales.map((sale) => ({
+    id: `sena-${sale.orderId}-${sale.bookId}`,
+    bookId: sale.bookId,
+    platform: "Sena.lt" as Platform,
+    soldAt: sale.soldAt,
+    quantity: sale.quantity,
+    salePrice: sale.price,
+    purchaseCost: 0,
+    fees: sale.fee,
+    packing: 0,
+  })),
+];
 
 const workSeed: WorkItem[] = [];
 
@@ -187,6 +201,7 @@ function saleProfit(sale: Sale) {
 
 function saleSourceLabel(sale: Sale) {
   if (sale.id.startsWith("agneali1990-")) return "Vinted / agneali1990";
+  if (sale.id.startsWith("sena-")) return "Sena.lt / skaitytaknygalt";
   return sale.platform;
 }
 
@@ -1132,6 +1147,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
 function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: Sale[]; updateSalePrice: (id: string, salePrice: number) => void }) {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const unmatchedTotal = agneali1990UnmatchedSales.reduce((sum, sale) => sum + sale.price, 0);
+  const senaUnmatchedTotal = senaUnmatchedSales.reduce((sum, sale) => sum + sale.price, 0);
   const bookStats = books.map((book) => {
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
     const enteredSoldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
@@ -1216,6 +1232,28 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
           <article key={`${sale.title}-${index}`} className="grid gap-2 p-4 md:grid-cols-[1fr_150px_190px] md:items-center">
             <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(sale.title)}</h3>
             <p className="text-base text-[#475569]">Kaina: <b>{money(sale.price)}</b></p>
+            <p className="w-fit rounded-full bg-[#fff3df] px-3 py-1 text-sm font-bold text-[#8a3b00]">
+              {sale.reason === "rinkinys" ? "Rinkinys" : sale.reason === "dublikatas kataloge" ? `Keli sutapimai (${sale.matches})` : "Nerasta kataloge"}
+            </p>
+          </article>
+        ))}
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-[#e87500] bg-white">
+      <div className="border-b border-[#e2e8f0] p-5">
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">Sena.lt</p>
+        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Nesuvesti Sena.lt pardavimai</h2>
+        <p className="mt-2 text-base text-[#475569]">
+          {senaUnmatchedSales.length} įrašai, {money(senaUnmatchedTotal)}. Nepririšau, jei pavadinimas nesutapo tiksliai arba kataloge buvo keli variantai.
+        </p>
+      </div>
+      <div className="max-h-[520px] overflow-auto divide-y divide-[#e2e8f0]">
+        {senaUnmatchedSales.map((sale) => (
+          <article key={sale.orderId} className="grid gap-2 p-4 md:grid-cols-[1fr_130px_130px_190px] md:items-center">
+            <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(sale.title)}</h3>
+            <p className="text-base text-[#475569]">Data: <b>{sale.soldAt}</b></p>
+            <p className="text-base text-[#475569]">Suma: <b>{money(sale.price)}</b></p>
             <p className="w-fit rounded-full bg-[#fff3df] px-3 py-1 text-sm font-bold text-[#8a3b00]">
               {sale.reason === "rinkinys" ? "Rinkinys" : sale.reason === "dublikatas kataloge" ? `Keli sutapimai (${sale.matches})` : "Nerasta kataloge"}
             </p>
