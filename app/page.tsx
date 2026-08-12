@@ -148,6 +148,10 @@ function daysBetween(start: string, end: string) {
   return Math.max(0, Math.round(diff / 86400000));
 }
 
+function historicalSales(book: Book) {
+  return book.listings.reduce((sum, listing) => sum + listing.sales, 0);
+}
+
 function loadBooks() {
   if (typeof window === "undefined") return booksSeed as Book[];
   try {
@@ -853,7 +857,8 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
   const bookStats = books.map((book) => {
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
-    const soldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
+    const enteredSoldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
+    const soldCount = enteredSoldCount + historicalSales(book);
     const revenue = bookSales.reduce((sum, sale) => sum + sale.salePrice, 0);
     const avgPrice = soldCount ? revenue / soldCount : 0;
     const firstSale = bookSales.map((sale) => sale.soldAt).sort()[0];
@@ -928,7 +933,9 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
   const totalStock = books.reduce((sum, book) => sum + book.stock, 0);
   const totalCatalogValue = books.reduce((sum, book) => sum + book.stock * book.recommendedPrice, 0);
   const totalRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
-  const totalSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const historicalSold = books.reduce((sum, book) => sum + historicalSales(book), 0);
+  const totalSold = enteredSold + historicalSold;
   const totalProfit = sales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0);
   const totalShipments = sales.length;
   const totalShippingCost = sales.reduce((sum, sale) => sum + sale.packing + sale.fees, 0);
@@ -1000,7 +1007,7 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
         <StatCard label="Pajamos iš viso" value={money(totalRevenue)} detail={`vid. ${money(averageSale)} už vnt.`} />
         <StatCard label="Knygų kataloge" value={books.length} detail={`${totalStock} egz. sandėlyje`} />
         <StatCard label="Katalogo vertė" value={money(totalCatalogValue)} detail="pagal pardavimo kainas" />
-        <StatCard label="Parduota egz." value={totalSold} detail={`${sales.length} pardavimo įrašų`} />
+        <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš WP istorijos`} />
         <StatCard label="Pelnas" value={money(totalProfit)} detail="kai žinoma savikaina" />
       </div>
 
@@ -1450,7 +1457,7 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
 }
 
 function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[] }) {
-  const sold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const sold = sales.reduce((sum, sale) => sum + sale.quantity, 0) + historicalSales(book);
   const platformRows = sources.map((source) => {
     const tracked = presence.find((listing) => listing.source === source.key);
     const local = source.key === "wp"
@@ -1462,6 +1469,7 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
       source,
       status: tracked?.status ?? local?.status ?? "neįkelta",
       price: tracked?.price ?? local?.price ?? 0,
+      sales: local?.sales ?? 0,
       url: tracked?.url ?? "",
       lastSeen: tracked?.lastSeen,
     };
@@ -1488,6 +1496,7 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
                 <span className={row.status === "aktyvu" ? "text-[#285b22]" : row.status === "parduota" ? "text-[#9a3412]" : "text-[#475569]"}>
                   {row.status}
                 </span>
+                {!!row.sales && <span className="text-[#475569]">parduota: {row.sales}</span>}
                 <span className="text-[#475569]">{row.price ? money(row.price) : "be kainos"}</span>
                 {row.lastSeen && <span className="text-[#64748b]">matyta: {row.lastSeen}</span>}
               </>
