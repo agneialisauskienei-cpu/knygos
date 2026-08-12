@@ -286,6 +286,7 @@ export default function Home() {
   }, [books, sales, items, calendar, trackingSources, wantedContacts]);
 
   const filteredBooks = books.filter((book) => book.title.toLowerCase().includes(query.toLowerCase()));
+  const visibleBooks = filteredBooks.slice(0, 120);
 
   function completeItem(id: string) {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, status: "atlikta" } : item)));
@@ -575,11 +576,17 @@ export default function Home() {
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
           {tab === "knygos" && (
             <section className="rounded-xl border border-[#e2e8f0] bg-white">
-              <div className="border-b border-[#e2e8f0] p-4 lg:hidden">
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field" />
+              <div className="grid gap-3 border-b border-[#e2e8f0] p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų katalogas</h2>
+                  <p className="mt-1 text-base text-[#475569]">
+                    Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
+                  </p>
+                </div>
+                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field lg:w-80" />
               </div>
               <div className="divide-y divide-[#e2e8f0]">
-                {filteredBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} />)}
+                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} />)}
               </div>
             </section>
           )}
