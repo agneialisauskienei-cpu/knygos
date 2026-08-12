@@ -95,114 +95,13 @@ type ListingPresence = {
   lastSeen: string;
 };
 
-const salesSeed: Sale[] = [
-  { id: "s1", bookId: "b1", platform: "WooCommerce", soldAt: "2026-08-12", quantity: 1, salePrice: 8, purchaseCost: 3.2, fees: 0.4, packing: 0.25 },
-  { id: "s2", bookId: "b1", platform: "Vinted", soldAt: "2026-08-05", quantity: 2, salePrice: 14, purchaseCost: 6.4, fees: 0, packing: 0.5 },
-  { id: "s3", bookId: "b2", platform: "WooCommerce", soldAt: "2026-08-03", quantity: 1, salePrice: 6.5, purchaseCost: 2.7, fees: 0.33, packing: 0.25 },
-];
+const salesSeed: Sale[] = [];
 
-const workSeed: WorkItem[] = [
-  {
-    id: "w2",
-    kind: "buy-request",
-    title: "Nauja supirkimo forma iš WP",
-    detail: "Žmogus siūlo 34 knygas, miestas Vilnius. Sutarta kaina: 45,00 Eur. Reikia paskambinti ir sutarti paėmimą.",
-    source: "WordPress forma",
-    due: "šiandien 16:00",
-    assignee: "Almantas",
-    status: "nauja",
-    urgent: true,
-  },
-  {
-    id: "w3",
-    kind: "email",
-    title: "Nauja užklausa Gmail",
-    detail: "Klausia dėl 3 knygų rezervacijos. Kliento duomenų čia nesaugom, tik veiksmas ir nuoroda.",
-    source: "Gmail",
-    due: "rytoj 09:00",
-    assignee: "Agne",
-    status: "vykdoma",
-  },
-  {
-    id: "w4",
-    kind: "reminder",
-    title: "Priminimas paskambinti",
-    detail: "Pakartoti skambutį dėl knygų paėmimo, jei neatsiliepė.",
-    source: "Priminimas",
-    due: "šiandien 18:00",
-    assignee: "Almantas",
-    status: "nauja",
-  },
-];
+const workSeed: WorkItem[] = [];
 
-const calendarSeed: CalendarEvent[] = [
-  {
-    id: "c1",
-    title: "Paėmimas: 34 knygos",
-    date: "2026-08-12",
-    time: "16:00",
-    address: "Vilnius, Zirmunai",
-    phone: "+370 600 00000",
-    agreedPrice: 45,
-    notes: "Pirma paskambinti, klausti ar yra detektyvų ir klasikos.",
-    assignee: "Almantas",
-    eventType: "supirkimas",
-    status: "suplanuota",
-  },
-  {
-    id: "c2",
-    title: "Susitikimas del 12 knygų",
-    date: "2026-08-13",
-    time: "11:30",
-    address: "Kaunas, Centras",
-    phone: "+370 611 11111",
-    agreedPrice: 28,
-    notes: "Paėmimas prie darbo, reikės maišelio.",
-    assignee: "Abu",
-    eventType: "supirkimas",
-    status: "paskambinta",
-  },
-  {
-    id: "c3",
-    title: "Atsiėmimas gyvai: Šachta",
-    date: "2026-08-14",
-    time: "17:30",
-    address: "Naujininkai, prie parduotuvės",
-    phone: "+370 622 33333",
-    agreedPrice: 8,
-    notes: "Žmogus atsiims vieną knygą, priminti pasiimti grąžą.",
-    assignee: "Agne",
-    eventType: "atsiėmimas gyvai",
-    status: "suplanuota",
-  },
-];
+const calendarSeed: CalendarEvent[] = [];
 
-const wantedContactsSeed: WantedContact[] = [
-  {
-    id: "wc1",
-    name: "Rasa",
-    contact: "+370 612 22222",
-    lookingFor: "Kristin Hannah knygos, ypač Lakštingala",
-    waitingSince: "2026-08-01",
-    channel: "Telefonas",
-    status: "laukia",
-    reminderDate: "2026-08-15",
-    assignee: "Agne",
-    notes: "Nori geros būklės, galima pasiūlyti 2-3 panašias.",
-  },
-  {
-    id: "wc2",
-    name: "Mantas",
-    contact: "gmail nuoroda",
-    lookingFor: "Sena lietuviška fantastika",
-    waitingSince: "2026-07-28",
-    channel: "Gmail",
-    status: "laukia",
-    reminderDate: "2026-08-13",
-    assignee: "Almantas",
-    notes: "Parašyti, jei partijoje atsiras Eridano serijos.",
-  },
-];
+const wantedContactsSeed: WantedContact[] = [];
 
 const trackingSeed: TrackingSource[] = [
   { key: "wp", name: "skaitytaknyga.lt", type: "WooCommerce", account: "WP / WooCommerce", method: "WooCommerce REST API", status: "prijungta", lastChecked: "šiandien 10:42", found: 128, issues: 1 },
@@ -212,23 +111,7 @@ const trackingSeed: TrackingSource[] = [
   { key: "vinted3", name: "Vinted #3", type: "Vinted", account: "wp.vizija", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "nepatikrinta", found: 0, issues: 0 },
 ];
 
-const listingPresenceSeed: ListingPresence[] = [
-  { bookId: "b1", source: "wp", status: "aktyvu", price: 8, url: "https://skaitytaknyga.lt/sachta", lastSeen: "šiandien" },
-  { bookId: "b1", source: "sena", status: "parduota", price: 8.5, url: "https://www.sena.lt/vartotojas/skaitytaknygalt", lastSeen: "vakar" },
-  { bookId: "b1", source: "vinted1", status: "aktyvu", price: 7, url: "https://www.vinted.lt/member/agneali1990", lastSeen: "šiandien" },
-  { bookId: "b1", source: "vinted2", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
-  { bookId: "b1", source: "vinted3", status: "reikia patikrinti", price: 0, url: "", lastSeen: "nepatikrinta" },
-  { bookId: "b2", source: "wp", status: "aktyvu", price: 6.5, url: "https://skaitytaknyga.lt/metai", lastSeen: "šiandien" },
-  { bookId: "b2", source: "sena", status: "aktyvu", price: 6, url: "https://www.sena.lt/vartotojas/skaitytaknygalt", lastSeen: "vakar" },
-  { bookId: "b2", source: "vinted1", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
-  { bookId: "b2", source: "vinted2", status: "aktyvu", price: 6, url: "https://www.vinted.lt/member/almisali", lastSeen: "šiandien" },
-  { bookId: "b2", source: "vinted3", status: "neįkelta", price: 0, url: "", lastSeen: "nepatikrinta" },
-  { bookId: "b3", source: "wp", status: "parduota", price: 9, url: "https://skaitytaknyga.lt/kava", lastSeen: "šiandien" },
-  { bookId: "b3", source: "sena", status: "neįkelta", price: 0, url: "", lastSeen: "vakar" },
-  { bookId: "b3", source: "vinted1", status: "aktyvu", price: 8, url: "https://www.vinted.lt/member/agneali1990", lastSeen: "šiandien" },
-  { bookId: "b3", source: "vinted2", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
-  { bookId: "b3", source: "vinted3", status: "neįkelta", price: 0, url: "", lastSeen: "nepatikrinta" },
-];
+const listingPresenceSeed: ListingPresence[] = [];
 
 const platforms: Platform[] = ["WooCommerce", "Vinted", "Sena.lt", "Facebook", "Gyvai", "Kita"];
 const august2026Days = Array.from({ length: 31 }, (_, index) => {
@@ -442,23 +325,6 @@ export default function Home() {
     setTab("knygos");
   }
 
-  function addWpRequest() {
-    setItems((current) => [
-      {
-        id: crypto.randomUUID(),
-        kind: "buy-request",
-        title: "Nauja supirkimo forma iš WP",
-        detail: "Demo užklausa: 18 knygų, sutarta kaina 30,00 Eur, reikia paskambinti ir sutarti paėmimą.",
-        source: "WordPress forma",
-        due: "šiandien +2 val.",
-        assignee: "Almantas",
-        status: "nauja",
-        urgent: true,
-      },
-      ...current,
-    ]);
-  }
-
   function runTrackingSync() {
     setTrackingSources((current) =>
       current.map((source) => ({
@@ -563,7 +429,6 @@ export default function Home() {
               <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />
               <div className="grid gap-5">
               <CalendarPanel calendar={calendar.slice(0, 2)} compact updateStatus={updateCalendarStatus} updateEvent={updateCalendarEvent} />
-              <WpPanel addWpRequest={addWpRequest} />
             </div>
           </section>
           )}
@@ -590,7 +455,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addWpRequest={addWpRequest} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} />}
+          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} />}
         </div>
       </div>
 
@@ -1341,16 +1206,6 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
   );
 }
 
-function WpPanel({ addWpRequest }: { addWpRequest: () => void }) {
-  return (
-    <section className="rounded-xl border border-[#e2e8f0] bg-white p-4">
-      <h2 className="text-2xl font-black tracking-[-0.03em]">WP supirkimo forma</h2>
-      <p className="mt-2 text-base text-[#475569]">Kai svetainėje ateina forma, čia atsiranda užduotis Almantui arba abiems.</p>
-      <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md border border-[#c65f00] text-base font-semibold text-[#a94f00]">Imituoti naują užklausą</button>
-    </section>
-  );
-}
-
 function BookRow({ book, sales }: { book: Book; sales: Sale[] }) {
   const sold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   return (
@@ -1374,14 +1229,14 @@ function BookRow({ book, sales }: { book: Book; sales: Sale[] }) {
   );
 }
 
-function EntryPanel({ books, addSale, addWpRequest, addCalendarEvent, importBookBatch }: { books: Book[]; addSale: (data: FormData) => void; addWpRequest: () => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void }) {
+function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void }) {
   return (
     <section className="grid gap-5 lg:grid-cols-3">
       <form action={importBookBatch} className="rounded-xl border border-[#c65f00] bg-white p-4 lg:col-span-3">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Įmesti knygų sąrašą</h2>
         <p className="mt-2 text-base text-[#475569]">Viena eilutė: pavadinimas; kiekis; eilutės pirkimo suma. Jei sumos nenurodysi, savikaina bus paskirstyta iš bendros sumos.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
-          <textarea name="bookList" placeholder={"Šachta; 2; 6,40\nMetai be sekmadienių; 4\nKita knyga; 1; 2,00"} className="min-h-36 rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#c65f00]" required />
+          <textarea name="bookList" placeholder={"Pavadinimas; kiekis; pirkimo suma\nPavadinimas; kiekis; pirkimo suma"} className="min-h-36 rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#c65f00]" required />
           <input name="totalCost" type="number" step="0.01" placeholder="Bendra suma" className="field" />
           <input name="acquiredAt" type="date" defaultValue="2026-08-12" className="field" />
           <input name="storage" placeholder="Vieta sandėlyje" className="field" />
@@ -1403,11 +1258,6 @@ function EntryPanel({ books, addSale, addWpRequest, addCalendarEvent, importBook
           <button className="h-10 rounded-md bg-[#c65f00] text-base font-semibold text-white">Išsaugoti ir sukurti pranešimą</button>
         </div>
       </form>
-      <section className="rounded-xl border border-[#e2e8f0] bg-white p-4">
-        <h2 className="text-2xl font-black tracking-[-0.03em]">Nauja supirkimo užklausa</h2>
-        <p className="mt-2 text-base text-[#475569]">Skirta testuoti, kaip ateitų užklausa iš WordPress formos.</p>
-        <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md bg-[#c65f00] text-base font-semibold text-white">Pridėti WP užklausą Almantui</button>
-      </section>
       <form action={addCalendarEvent} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti paėmimą / atsiėmimą</h2>
         <div className="mt-4 grid gap-3">
