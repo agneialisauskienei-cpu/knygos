@@ -726,7 +726,7 @@ export default function Home() {
       setBooksState(updatedBooks);
       persistBooks(updatedBooks);
       const successMessage = senaWarning
-        ? `WP atnaujinta. Sena.lt laikinai nepilnai pasiekiama: ${senaWarning}. Rasta ${senaFound}, susieta ${senaPresence.length}.`
+        ? `WP atnaujinta. Sena.lt automatinis tikrinimas blokuojamas, todėl rodomi rankiniu patvirtinti Sena.lt įkėlimai.`
         : `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
       setSyncMessage(successMessage);
       syncOk = true;
