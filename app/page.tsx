@@ -214,6 +214,18 @@ function hasExactDate(sale: Sale) {
   return /^\d{4}-\d{2}-\d{2}$/.test(sale.soldAt);
 }
 
+function titleKey(value: string) {
+  return decodeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[„“”"']/g, "")
+    .replace(/[–—-]/g, " ")
+    .replace(/[^a-z0-9ąčęėįšųūž\s]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function historicalSales(book: Book) {
   return book.listings.reduce((sum, listing) => sum + listing.sales, 0);
 }
@@ -224,9 +236,9 @@ function historicalRevenue(book: Book) {
 
 function mergeBooksWithSeed(storedBooks: Book[]) {
   const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
-  const seedByTitle = new Map((booksSeed as Book[]).map((book) => [book.title.toLowerCase(), book]));
+  const seedByTitle = new Map((booksSeed as Book[]).map((book) => [titleKey(book.title), book]));
   const merged = storedBooks.map((book) => {
-    const seed = seedById.get(book.id) ?? seedByTitle.get(book.title.toLowerCase());
+    const seed = seedById.get(book.id) ?? seedByTitle.get(titleKey(book.title));
     if (!seed) return book;
     return {
       ...seed,
@@ -568,11 +580,11 @@ export default function Home() {
       if (!Array.isArray(data.products)) throw new Error("WP grąžino netinkamą produktų formatą");
       wpFound = data.total || data.products.length || books.length;
       const syncedBooks = new Map<string, Book>();
-      const byTitle = new Map(books.map((book) => [book.title.toLowerCase(), book]));
+      const byTitle = new Map(books.map((book) => [titleKey(book.title), book]));
       const nextBooks = [...books];
 
       for (const product of data.products.filter((entry) => entry.title)) {
-        const key = product.title.toLowerCase();
+        const key = titleKey(product.title);
         let book = byTitle.get(key);
         if (!book) {
           book = {
@@ -621,7 +633,7 @@ export default function Home() {
 
       wpPresence = data.products
         .map((product) => {
-          const book = syncedBooks.get(product.title.toLowerCase());
+          const book = syncedBooks.get(titleKey(product.title));
           if (!book) return null;
           return {
             bookId: book.id,
@@ -641,11 +653,11 @@ export default function Home() {
       senaFound = senaData.total || senaData.products.length;
 
       const booksAfterWp = nextBooks;
-      const booksByTitle = new Map(booksAfterWp.map((book) => [book.title.toLowerCase(), book]));
+      const booksByTitle = new Map(booksAfterWp.map((book) => [titleKey(book.title), book]));
       const updatedBooks = [...booksAfterWp];
 
       for (const product of senaData.products.filter((entry) => entry.title)) {
-        const book = booksByTitle.get(product.title.toLowerCase());
+        const book = booksByTitle.get(titleKey(product.title));
         if (!book) continue;
         const index = updatedBooks.findIndex((entry) => entry.id === book.id);
         const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");

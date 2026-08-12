@@ -25,6 +25,16 @@ function productPrice(fragment: string) {
   return match ? Number(match[1].replace(",", ".")) : 0;
 }
 
+function titleFromProductPage(html: string) {
+  const h1 = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  if (h1) return cleanText(h1[1]);
+
+  const ogTitle = html.match(/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+  if (ogTitle) return cleanText(ogTitle[1].replace(/\s*-\s*Sena\.lt.*$/i, ""));
+
+  return "";
+}
+
 function parseProducts(html: string) {
   const products = new Map<string, SenaProduct>();
   const linkPattern = /<a\b[^>]*href="([^"]*\/[^"]+\/(\d{5,}))"[^>]*>([\s\S]*?)<\/a>/gi;
@@ -54,6 +64,25 @@ function parseProducts(html: string) {
   return Array.from(products.values());
 }
 
+async function enrichProduct(product: SenaProduct) {
+  try {
+    const response = await fetch(product.url, {
+      headers: {
+        accept: "text/html",
+        "user-agent": "KnyguApskaita/1.0",
+      },
+      next: { revalidate: 300 },
+    });
+    if (!response.ok) return product;
+
+    const html = await response.text();
+    const title = titleFromProductPage(html);
+    return title ? { ...product, title } : product;
+  } catch {
+    return product;
+  }
+}
+
 export async function GET() {
   const products: SenaProduct[] = [];
 
@@ -78,5 +107,6 @@ export async function GET() {
   }
 
   const unique = Array.from(new Map(products.map((product) => [product.id, product])).values());
-  return NextResponse.json({ total: unique.length, products: unique });
+  const enriched = await Promise.all(unique.map(enrichProduct));
+  return NextResponse.json({ total: enriched.length, products: enriched });
 }
