@@ -272,11 +272,51 @@ function titleKey(value: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\([^)]*\)/g, " ")
     .replace(/[„“”"']/g, "")
     .replace(/[–—-]/g, " ")
     .replace(/[^a-z0-9ąčęėįšųūž\s]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function titleTokens(value: string) {
+  return titleKey(value)
+    .split(" ")
+    .filter((token) => token.length > 1 && !["tomas", "dalis", "knyga"].includes(token));
+}
+
+function titleStem(value: string) {
+  const tokens = titleTokens(value);
+  const trimmed = tokens.filter((token) => !["tom", "tomu", "tomas", "dalis"].includes(token));
+  return trimmed.join(" ");
+}
+
+function matchBookByTitle(books: Book[], title: string) {
+  const key = titleKey(title);
+  const stem = titleStem(title);
+  const exact = books.find((book) => titleKey(book.title) === key);
+  if (exact) return exact;
+  if (key.length < 8) return undefined;
+
+  const partial = books.filter((book) => {
+    const bookKey = titleKey(book.title);
+    const bookStem = titleStem(book.title);
+    return (
+      bookKey.length >= 8 &&
+      (bookKey.startsWith(key) || key.startsWith(bookKey) || bookStem.startsWith(stem) || stem.startsWith(bookStem))
+    );
+  });
+  if (partial.length === 1) return partial[0];
+
+  const sourceTokens = titleTokens(title);
+  if (sourceTokens.length < 3) return undefined;
+  const tokenMatches = books.filter((book) => {
+    const bookTokens = new Set(titleTokens(book.title));
+    const matched = sourceTokens.filter((token) => bookTokens.has(token)).length;
+    return matched >= Math.min(sourceTokens.length, 4);
+  });
+  return tokenMatches.length === 1 ? tokenMatches[0] : undefined;
 }
 
 function historicalSales(book: Book) {
@@ -639,12 +679,11 @@ export default function Home() {
   function importSenaPaste(formData: FormData) {
     const products = parseSenaPaste(String(formData.get("senaList") || ""));
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
-    const booksByTitle = new Map(books.map((book) => [titleKey(book.title), book]));
     const presenceRows: ListingPresence[] = [];
     const unmatched: string[] = [];
 
     const updatedBooks = books.map((book) => {
-      const product = products.find((entry) => titleKey(entry.title) === titleKey(book.title));
+      const product = products.find((entry) => matchBookByTitle([book], entry.title));
       if (!product) return book;
       const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");
       presenceRows.push({
@@ -664,7 +703,7 @@ export default function Home() {
     });
 
     for (const product of products) {
-      if (!booksByTitle.has(titleKey(product.title))) unmatched.push(product.title);
+      if (!matchBookByTitle(books, product.title)) unmatched.push(product.title);
     }
 
     setBooksState(updatedBooks);
@@ -695,14 +734,12 @@ export default function Home() {
   async function runTrackingSync() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     let wpFound = books.length;
-    let senaFound = 0;
     let wpPresence: ListingPresence[] = [];
-    let senaPresence: ListingPresence[] = [];
     let importedCount = 0;
     let syncOk = false;
 
     setSyncingWp(true);
-    setSyncMessage("Vyksta atnaujinimas, tikrinama skaitytaknyga.lt ir Sena.lt...");
+    setSyncMessage("Vyksta atnaujinimas, tikrinama skaitytaknyga.lt...");
 
     try {
       const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
@@ -777,46 +814,7 @@ export default function Home() {
         })
         .filter(Boolean) as ListingPresence[];
 
-      const senaResponse = await fetch("/api/sena/products", { cache: "no-store" });
-      if (!senaResponse.ok) throw new Error(`Nepavyko pasiekti Sena.lt (${senaResponse.status})`);
-      const senaData = await senaResponse.json() as { total: number; products: MarketplaceProduct[]; warnings?: string[] };
-      if (!Array.isArray(senaData.products)) throw new Error("Sena.lt grąžino netinkamą produktų formatą");
-      senaFound = senaData.total || senaData.products.length;
-      const senaWarning = senaData.warnings?.[0];
-
-      const booksAfterWp = nextBooks;
-      const booksByTitle = new Map(booksAfterWp.map((book) => [titleKey(book.title), book]));
-      const updatedBooks = [...booksAfterWp];
-
-      for (const product of senaData.products.filter((entry) => entry.title)) {
-        const book = booksByTitle.get(titleKey(product.title));
-        if (!book) continue;
-        const index = updatedBooks.findIndex((entry) => entry.id === book.id);
-        const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");
-        const nextListings = hasSenaListing
-          ? book.listings.map((listing) =>
-              listing.platform === "Sena.lt"
-                ? { ...listing, status: "aktyvu", price: product.price || listing.price }
-                : listing,
-            )
-          : [...book.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: product.price, sales: 0 }];
-        if (index !== -1) updatedBooks[index] = { ...book, listings: nextListings };
-        senaPresence.push({
-          bookId: book.id,
-          source: "sena",
-          status: "aktyvu",
-          price: product.price,
-          url: product.url,
-          lastSeen: checkedAt,
-        });
-      }
-
-      setBooksState(updatedBooks);
-      persistBooks(updatedBooks);
-      const successMessage = senaWarning
-        ? `WP atnaujinta. Sena.lt automatinis tikrinimas blokuojamas, todėl rodomi rankiniu patvirtinti Sena.lt įkėlimai.`
-        : `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
-      setSyncMessage(successMessage);
+      setSyncMessage(`WP atnaujinta: rasta ${wpFound}, naujai įrašyta ${importedCount}. Sena.lt pildoma tik rankiniu importu.`);
       syncOk = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nežinoma klaida";
@@ -843,17 +841,17 @@ export default function Home() {
       setTrackingSources((current) =>
         current.map((source) => ({
           ...source,
-          status: source.key === "wp" || source.key === "sena" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
-          found: source.key === "wp" ? wpFound : source.key === "sena" ? senaFound : source.found,
-          lastChecked: source.key === "wp" || source.key === "sena" ? checkedAt : "ką tik",
+          status: source.key === "wp" ? "prijungta" : source.status === "klaida" ? "klaida" : source.status,
+          found: source.key === "wp" ? wpFound : source.found,
+          lastChecked: source.key === "wp" ? checkedAt : source.lastChecked,
         })),
       );
       setItems((current) => [
         {
           id: crypto.randomUUID(),
           kind: "reminder",
-          title: "Platformų sekimas atnaujintas",
-          detail: `Patikrinta skaitytaknyga.lt ir Sena.lt. WP rasta: ${wpFound}, Sena.lt rasta: ${senaFound}, su katalogu susieta: ${senaPresence.length}, naujai įrašyta: ${importedCount}.`,
+          title: "WP sekimas atnaujintas",
+          detail: `Patikrinta skaitytaknyga.lt. WP rasta: ${wpFound}, naujai įrašyta: ${importedCount}. Sena.lt pildoma rankiniu importu.`,
           source: "Sekimas",
           due: "dabar",
           assignee: "Agne",
@@ -863,7 +861,7 @@ export default function Home() {
         ...current,
       ]);
       setListingPresence((current) => {
-        const nextPresence = [...wpPresence, ...senaPresence, ...current.filter((listing) => listing.source !== "wp" && listing.source !== "sena")];
+        const nextPresence = [...wpPresence, ...current.filter((listing) => listing.source !== "wp")];
         persistListingPresence(nextPresence);
         return nextPresence;
       });
@@ -960,7 +958,7 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="grid gap-2 justify-self-start xl:justify-self-end">
-                  <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP ir Sena.lt"}</button>
+                  <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP"}</button>
                   {syncMessage && (
                     <p className={`rounded-lg border px-3 py-2 text-sm font-semibold ${syncMessage.startsWith("Nepavyko") ? "border-[#fecaca] bg-[#fff1f2] text-[#9f1239]" : "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]"}`}>
                       {syncMessage}
