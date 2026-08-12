@@ -330,7 +330,14 @@ function matchBookByTitle(books: Book[], title: string) {
     .filter((match) => match.score >= (sourceTokens.length === 2 ? 1 : 0.82))
     .sort((a, b) => b.score - a.score);
   if (!tokenMatches.length) return undefined;
-  if (tokenMatches.length === 1 || tokenMatches[0].score > tokenMatches[1].score) return tokenMatches[0].book;
+  if (tokenMatches.length === 1) return tokenMatches[0].book;
+  const sourceKey = titleKey(title);
+  const narrowed = tokenMatches.filter((match) => {
+    const bookKey = titleKey(match.book.title);
+    return bookKey.includes(sourceKey) || titleStem(match.book.title).includes(titleStem(title));
+  });
+  if (narrowed.length === 1) return narrowed[0].book;
+  if (tokenMatches[0].score > tokenMatches[1].score) return tokenMatches[0].book;
   return undefined;
 }
 
@@ -788,6 +795,9 @@ export default function Home() {
     });
     setUnmatchedListings((current) => {
       const byKey = new Map(current.map((listing) => [`${listing.source}-${titleKey(listing.title)}`, listing]));
+      for (const product of products) {
+        if (matchBookByTitle(books, product.title)) byKey.delete(`${source}-${titleKey(product.title)}`);
+      }
       for (const listing of unmatched) byKey.set(`${listing.source}-${titleKey(listing.title)}`, listing);
       const next = Array.from(byKey.values());
       persistUnmatchedListings(next);
