@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { booksSeed } from "./books-data";
 
 const APP_PASSWORD = "knygos2026";
+const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
@@ -95,6 +96,15 @@ type ListingPresence = {
   lastSeen: string;
 };
 
+type WpProduct = {
+  id: number;
+  title: string;
+  price: number;
+  url: string;
+  image: string;
+  stockStatus: string;
+};
+
 const salesSeed: Sale[] = [];
 
 const workSeed: WorkItem[] = [];
@@ -138,11 +148,27 @@ function daysBetween(start: string, end: string) {
   return Math.max(0, Math.round(diff / 86400000));
 }
 
+function loadBooks() {
+  if (typeof window === "undefined") return booksSeed as Book[];
+  try {
+    const stored = window.localStorage.getItem(BOOK_STORAGE_KEY);
+    return stored ? JSON.parse(stored) as Book[] : booksSeed as Book[];
+  } catch {
+    return booksSeed as Book[];
+  }
+}
+
+function persistBooks(books: Book[]) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(BOOK_STORAGE_KEY, JSON.stringify(books));
+  }
+}
+
 export default function Home() {
   const [unlocked, setUnlocked] = useState(() => (typeof window === "undefined" ? false : window.sessionStorage.getItem("knygu-apskaita-auth") === "ok"));
   const [passwordError, setPasswordError] = useState("");
   const [tab, setTab] = useState<Tab>("šiandien");
-  const [books, setBooks] = useState<Book[]>(booksSeed as Book[]);
+  const [books, setBooksState] = useState<Book[]>(loadBooks);
   const [sales, setSales] = useState(salesSeed);
   const [items, setItems] = useState(workSeed);
   const [calendar, setCalendar] = useState(calendarSeed);
@@ -170,6 +196,14 @@ export default function Home() {
 
   const filteredBooks = books.filter((book) => book.title.toLowerCase().includes(query.toLowerCase()));
   const visibleBooks = filteredBooks.slice(0, 120);
+
+  function saveBooks(updater: (current: Book[]) => Book[]) {
+    setBooksState((current) => {
+      const next = updater(current);
+      persistBooks(next);
+      return next;
+    });
+  }
 
   function completeItem(id: string) {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, status: "atlikta" } : item)));
@@ -277,7 +311,7 @@ export default function Home() {
       packing: Number(formData.get("packing") || 0),
     };
     setSales((current) => [sale, ...current]);
-    setBooks((current) => current.map((entry) => (entry.id === bookId ? { ...entry, stock: Math.max(0, entry.stock - sale.quantity) } : entry)));
+    saveBooks((current) => current.map((entry) => (entry.id === bookId ? { ...entry, stock: Math.max(0, entry.stock - sale.quantity) } : entry)));
   }
 
   function updateSalePrice(id: string, salePrice: number) {
@@ -304,7 +338,7 @@ export default function Home() {
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
     const sharedUnitCost = totalQuantity > 0 && totalCost > 0 ? totalCost / totalQuantity : 0;
 
-    setBooks((current) => [
+    saveBooks((current) => [
       ...rows.map((row) => ({
         id: crypto.randomUUID(),
         title: row.title,
@@ -329,16 +363,67 @@ export default function Home() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     let wpFound = books.length;
     let wpPresence: ListingPresence[] = [];
+    let importedCount = 0;
 
     try {
       const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
       if (!response.ok) throw new Error("Nepavyko pasiekti skaitytaknyga.lt");
-      const data = await response.json() as { total: number; products: { title: string; price: number; url: string; stockStatus: string }[] };
+      const data = await response.json() as { total: number; products: WpProduct[] };
       wpFound = data.total || data.products.length || books.length;
-      const byTitle = new Map(books.map((book) => [book.title.toLowerCase(), book]));
+      const syncedBooks = new Map<string, Book>();
+
+      saveBooks((current) => {
+        const byTitle = new Map(current.map((book) => [book.title.toLowerCase(), book]));
+        const next = [...current];
+
+        for (const product of data.products) {
+          const key = product.title.toLowerCase();
+          let book = byTitle.get(key);
+          if (!book) {
+            book = {
+              id: `wp-${product.id}`,
+              title: product.title,
+              image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
+              stock: product.stockStatus === "outofstock" ? 0 : 1,
+              storage: "skaitytaknyga.lt",
+              acquiredAt: new Date().toISOString().slice(0, 10),
+              purchasePrice: undefined,
+              recommendedPrice: product.price || 5,
+              listings: [
+                { platform: "WooCommerce", status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price, sales: 0 },
+                { platform: "Vinted", status: "neįkelta", price: 0, sales: 0 },
+                { platform: "Sena.lt", status: "neįkelta", price: 0, sales: 0 },
+              ],
+            };
+            byTitle.set(key, book);
+            next.unshift(book);
+            importedCount += 1;
+          } else {
+            const existingBook = book;
+            book = {
+              ...book,
+              image: book.image || product.image,
+              stock: product.stockStatus === "outofstock" ? 0 : Math.max(1, book.stock),
+              recommendedPrice: product.price || book.recommendedPrice,
+              listings: book.listings.map((listing) =>
+                listing.platform === "WooCommerce"
+                  ? { ...listing, status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price }
+                  : listing,
+              ),
+            };
+            const index = next.findIndex((entry) => entry.id === existingBook.id);
+            if (index !== -1) next[index] = book;
+            byTitle.set(key, book);
+          }
+          syncedBooks.set(key, book);
+        }
+
+        return next;
+      });
+
       wpPresence = data.products
         .map((product) => {
-          const book = byTitle.get(product.title.toLowerCase());
+          const book = syncedBooks.get(product.title.toLowerCase());
           if (!book) return null;
           return {
             bookId: book.id,
@@ -380,7 +465,7 @@ export default function Home() {
         id: crypto.randomUUID(),
         kind: "reminder",
         title: "Platformų sekimas atnaujintas",
-        detail: `Patikrinta skaitytaknyga.lt, Sena.lt ir 3 Vinted paskyros. WP rasta: ${wpFound} skelb.`,
+        detail: `Patikrinta skaitytaknyga.lt, Sena.lt ir 3 Vinted paskyros. WP rasta: ${wpFound} skelb., naujai įrašyta: ${importedCount}.`,
         source: "Sekimas",
         due: "dabar",
         assignee: "Agne",

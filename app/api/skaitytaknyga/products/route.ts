@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 
 type StoreProduct = {
+  id?: number;
   name?: string;
   permalink?: string;
+  images?: { src?: string }[];
   prices?: {
     price?: string;
     currency_minor_unit?: number;
@@ -19,28 +21,37 @@ function productPrice(product: StoreProduct) {
 }
 
 export async function GET() {
-  const url = "https://skaitytaknyga.lt/wp-json/wc/store/products?per_page=100&page=1";
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      "user-agent": "KnyguApskaita/1.0",
-    },
-    next: { revalidate: 300 },
-  });
+  const products: StoreProduct[] = [];
+  let total = 0;
 
-  if (!response.ok) {
-    return NextResponse.json({ error: "Skaitytaknyga.lt katalogo pasiekti nepavyko" }, { status: 502 });
+  for (let page = 1; page <= 5; page += 1) {
+    const url = `https://skaitytaknyga.lt/wp-json/wc/store/products?per_page=100&page=${page}`;
+    const response = await fetch(url, {
+      headers: {
+        accept: "application/json",
+        "user-agent": "KnyguApskaita/1.0",
+      },
+      next: { revalidate: 300 },
+    });
+
+    if (!response.ok) {
+      return NextResponse.json({ error: "Skaitytaknyga.lt katalogo pasiekti nepavyko" }, { status: 502 });
+    }
+
+    total = Number(response.headers.get("x-wp-total") ?? total);
+    const pageProducts = (await response.json()) as StoreProduct[];
+    products.push(...pageProducts);
+    if (pageProducts.length < 100 || products.length >= total) break;
   }
-
-  const total = Number(response.headers.get("x-wp-total") ?? 0);
-  const products = (await response.json()) as StoreProduct[];
 
   return NextResponse.json({
     total,
     products: products.map((product) => ({
+      id: product.id ?? 0,
       title: product.name ?? "",
       price: productPrice(product),
       url: product.permalink ?? "",
+      image: product.images?.[0]?.src ?? "",
       stockStatus: product.stock_status ?? "instock",
     })),
   });
