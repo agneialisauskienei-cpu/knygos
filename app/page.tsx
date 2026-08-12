@@ -358,6 +358,38 @@ function hasActiveListing(book: Book, source: SourceKey, presence: ListingPresen
   return false;
 }
 
+function parseSenaPaste(rawText: string) {
+  const lines = decodeText(rawText)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const products: MarketplaceProduct[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < lines.length - 4; index += 1) {
+    const title = lines[index];
+    const views = lines[index + 1];
+    const code = lines[index + 2];
+    const repeatedTitle = lines[index + 4];
+    const price = lines[index + 5];
+    if (!/^\d+$/.test(views) || !/^\d+$/.test(code)) continue;
+    if (titleKey(title) !== titleKey(repeatedTitle)) continue;
+    const priceMatch = price?.match(/(\d+(?:[,.]\d{1,2})?)\s*(?:€|Eur|EUR)/i);
+    if (!priceMatch) continue;
+    const key = titleKey(title);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    products.push({
+      id: `sena-paste-${code}`,
+      title,
+      price: Number(priceMatch[1].replace(",", ".")),
+      url: "https://www.sena.lt/vartotojas/skaitytaknygalt",
+    });
+  }
+
+  return products;
+}
+
 export default function Home() {
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooksState] = useState<Book[]>(loadBooks);
@@ -601,6 +633,62 @@ export default function Home() {
       })),
       ...current,
     ]);
+    setTab("knygos");
+  }
+
+  function importSenaPaste(formData: FormData) {
+    const products = parseSenaPaste(String(formData.get("senaList") || ""));
+    const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+    const booksByTitle = new Map(books.map((book) => [titleKey(book.title), book]));
+    const presenceRows: ListingPresence[] = [];
+    const unmatched: string[] = [];
+
+    const updatedBooks = books.map((book) => {
+      const product = products.find((entry) => titleKey(entry.title) === titleKey(book.title));
+      if (!product) return book;
+      const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");
+      presenceRows.push({
+        bookId: book.id,
+        source: "sena",
+        status: "aktyvu",
+        price: product.price,
+        url: product.url,
+        lastSeen: checkedAt,
+      });
+      return {
+        ...book,
+        listings: hasSenaListing
+          ? book.listings.map((listing) => listing.platform === "Sena.lt" ? { ...listing, status: "aktyvu", price: product.price } : listing)
+          : [...book.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: product.price, sales: 0 }],
+      };
+    });
+
+    for (const product of products) {
+      if (!booksByTitle.has(titleKey(product.title))) unmatched.push(product.title);
+    }
+
+    setBooksState(updatedBooks);
+    persistBooks(updatedBooks);
+    setListingPresence((current) => {
+      const next = [
+        ...presenceRows,
+        ...current.filter((listing) => !(listing.source === "sena" && presenceRows.some((row) => row.bookId === listing.bookId))),
+      ];
+      persistListingPresence(next);
+      return next;
+    });
+    setTrackingSources((current) =>
+      current.map((source) =>
+        source.key === "sena"
+          ? { ...source, status: "prijungta", found: products.length, issues: unmatched.length, lastChecked: checkedAt }
+          : source,
+      ),
+    );
+    setSyncMessage(
+      unmatched.length
+        ? `Sena.lt importuota: susieta ${presenceRows.length}, nepriskirta ${unmatched.length}: ${unmatched.slice(0, 5).join(", ")}${unmatched.length > 5 ? "..." : ""}`
+        : `Sena.lt importuota: susieta ${presenceRows.length} iš ${products.length}.`,
+    );
     setTab("knygos");
   }
 
@@ -951,7 +1039,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} />}
+          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importSenaPaste={importSenaPaste} />}
         </div>
       </div>
 
@@ -1876,7 +1964,7 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
   );
 }
 
-function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void }) {
+function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importSenaPaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importSenaPaste: (data: FormData) => void }) {
   return (
     <section className="grid gap-5 lg:grid-cols-3">
       <form action={importBookBatch} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
@@ -1889,6 +1977,12 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch }: { boo
           <input name="storage" placeholder="Vieta sandėlyje" className="field" />
         </div>
         <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti ir paskaičiuoti savikainą</button>
+      </form>
+      <form action={importSenaPaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
+        <h2 className="text-2xl font-black tracking-[-0.03em]">Importuoti Sena.lt įkėlimus</h2>
+        <p className="mt-2 text-base text-[#475569]">Įklijuok Sena.lt prekių puslapio tekstą. Programa pažymės rastas knygas kaip aktyvias Sena.lt skelbimuose.</p>
+        <textarea name="senaList" placeholder="Įklijuok Sena.lt prekių sąrašą" className="mt-4 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
+        <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti Sena.lt sąrašą</button>
       </form>
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
