@@ -325,12 +325,54 @@ export default function Home() {
     setTab("knygos");
   }
 
-  function runTrackingSync() {
+  async function runTrackingSync() {
+    const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+    let wpFound = books.length;
+    let wpPresence: ListingPresence[] = [];
+
+    try {
+      const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
+      if (!response.ok) throw new Error("Nepavyko pasiekti skaitytaknyga.lt");
+      const data = await response.json() as { total: number; products: { title: string; price: number; url: string; stockStatus: string }[] };
+      wpFound = data.total || data.products.length || books.length;
+      const byTitle = new Map(books.map((book) => [book.title.toLowerCase(), book]));
+      wpPresence = data.products
+        .map((product) => {
+          const book = byTitle.get(product.title.toLowerCase());
+          if (!book) return null;
+          return {
+            bookId: book.id,
+            source: "wp" as SourceKey,
+            status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu",
+            price: product.price,
+            url: product.url,
+            lastSeen: checkedAt,
+          };
+        })
+        .filter(Boolean) as ListingPresence[];
+    } catch {
+      setItems((current) => [
+        {
+          id: crypto.randomUUID(),
+          kind: "reminder",
+          title: "Skaitytaknyga.lt sekimo klaida",
+          detail: "Nepavyko automatiškai nuskaityti viešo WooCommerce katalogo. Gali reikėti read-only WooCommerce API rakto.",
+          source: "Sekimas",
+          due: "dabar",
+          assignee: "Agne",
+          status: "nauja",
+          urgent: true,
+        },
+        ...current,
+      ]);
+    }
+
     setTrackingSources((current) =>
       current.map((source) => ({
         ...source,
-        status: source.status === "klaida" ? "klaida" : "prijungta",
-        lastChecked: "ką tik",
+        status: source.key === "wp" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
+        found: source.key === "wp" ? wpFound : source.found,
+        lastChecked: source.key === "wp" ? checkedAt : "ką tik",
       })),
     );
     setItems((current) => [
@@ -338,7 +380,7 @@ export default function Home() {
         id: crypto.randomUUID(),
         kind: "reminder",
         title: "Platformų sekimas atnaujintas",
-        detail: "Patikrinta WP, Sena.lt ir 3 Vinted paskyros. Rasti aktyvūs skelbimai ir neatitikimai.",
+        detail: `Patikrinta skaitytaknyga.lt, Sena.lt ir 3 Vinted paskyros. WP rasta: ${wpFound} skelb.`,
         source: "Sekimas",
         due: "dabar",
         assignee: "Agne",
@@ -347,7 +389,7 @@ export default function Home() {
       },
       ...current,
     ]);
-    setListingPresence((current) => [...current]);
+    setListingPresence((current) => [...wpPresence, ...current.filter((listing) => listing.source !== "wp")]);
   }
 
   function addWantedContact(formData: FormData) {
@@ -583,6 +625,7 @@ function TrackingScreen({ books, sources, presence, selectedSource, runTrackingS
   const visibleSources = selectedSource === "all" ? sourceOrder : [selectedSource];
   const selectedSourceName = selectedSource === "all" ? "visose platformose" : sources.find((source) => source.key === selectedSource)?.name ?? "platformoje";
   const uploadedListings = presence.filter((listing) => visibleSources.includes(listing.source) && listing.status !== "neįkelta");
+  const matrixBooks = books.slice(0, 120);
 
   return (
     <section className="grid gap-5">
@@ -642,10 +685,10 @@ function TrackingScreen({ books, sources, presence, selectedSource, runTrackingS
       <div className="rounded-xl border border-[#e2e8f0] bg-white">
         <div className="border-b border-[#e2e8f0] p-4">
           <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų platformų matrica</h2>
-          <p className="mt-1 text-base text-[#475569]">Čia matosi, kur knyga įkelta, kur parduota ir kur reikia patikrinti.</p>
+          <p className="mt-1 text-base text-[#475569]">Rodoma {matrixBooks.length} iš {books.length} knygų, kad sekimo ekranas veiktų greitai.</p>
         </div>
         <div className="divide-y divide-[#e2e8f0]">
-          {books.map((book) => (
+          {matrixBooks.map((book) => (
             <article key={book.id} className="grid gap-3 p-4 xl:grid-cols-[1fr_2fr]">
               <div className="flex gap-3">
                 <img src={book.image} alt="" className="h-16 w-12 rounded-md object-cover" />
