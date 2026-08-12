@@ -17,6 +17,7 @@ type SalesCountFilter = "all" | "0" | "1" | "2-4" | "5+";
 type SortFilter = "title" | "priceDesc" | "priceAsc" | "soldDesc" | "stockAsc" | "newest";
 type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "statistika" | "istorija" | "pranešimai" | "ivedimas" | "filtrai";
 type Assignee = "Agne" | "Almantas" | "Abu";
+type DuplicateCandidate = { keep: Book; duplicate: Book; reason: string };
 
 type Book = {
   id: string;
@@ -526,6 +527,33 @@ function reviewBookFromListing(listing: UnmatchedListing, platform: Platform): B
   };
 }
 
+function duplicateCandidates(books: Book[]) {
+  const catalogBooks = books.filter((book) => !isReviewBook(book));
+  const groups = new Map<string, Book[]>();
+  const candidates: DuplicateCandidate[] = [];
+
+  for (const book of catalogBooks) {
+    const keys = new Set([titleKey(book.title), titleStem(book.title)].filter((key) => key.length >= 8));
+    for (const key of keys) groups.set(key, [...(groups.get(key) ?? []), book]);
+  }
+
+  const seen = new Set<string>();
+  for (const [key, group] of groups) {
+    if (group.length < 2) continue;
+    const keeper = group.find((book) => book.id.startsWith("woo-")) ?? group[0];
+    for (const duplicate of group) {
+      if (duplicate.id === keeper.id) continue;
+      const pairKey = [keeper.id, duplicate.id].sort().join("-");
+      if (seen.has(pairKey)) continue;
+      seen.add(pairKey);
+      candidates.push({ keep: keeper, duplicate, reason: key === titleKey(keeper.title) ? "sutampa pavadinimas" : "sutampa supaprastintas pavadinimas" });
+      if (candidates.length >= 30) return candidates;
+    }
+  }
+
+  return candidates;
+}
+
 export default function Home() {
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooksState] = useState<Book[]>(loadBooks);
@@ -560,6 +588,7 @@ export default function Home() {
       waitingContacts: wantedContacts.filter((contact) => contact.status === "laukia").length,
     };
   }, [books, sales, items, calendar, trackingSources, wantedContacts]);
+  const duplicates = useMemo(() => duplicateCandidates(books), [books]);
 
   const filteredBooks = books.filter((book) => {
     if (statusFilter === "reikia patikrinti") return false;
@@ -908,6 +937,46 @@ export default function Home() {
     setFilterMessage(`Sujungta: ${decodeText(listing.title)} → ${decodeText(book.title)}.`);
   }
 
+  function mergeDuplicateBook(keepId: string, duplicateId: string) {
+    const keep = books.find((book) => book.id === keepId);
+    const duplicate = books.find((book) => book.id === duplicateId);
+    if (!keep || !duplicate) return;
+
+    saveBooks((current) =>
+      current
+        .filter((book) => book.id !== duplicateId)
+        .map((book) => {
+          if (book.id !== keepId) return book;
+          const mergedListings = [...book.listings];
+          for (const listing of duplicate.listings) {
+            const existing = mergedListings.find((entry) => entry.platform === listing.platform);
+            if (!existing) {
+              mergedListings.push(listing);
+              continue;
+            }
+            if (existing.status === "neįkelta" && listing.status !== "neįkelta") existing.status = listing.status;
+            if (!existing.price && listing.price) existing.price = listing.price;
+            existing.sales = Math.max(existing.sales, listing.sales);
+          }
+          return {
+            ...book,
+            stock: Math.max(book.stock, duplicate.stock),
+            storage: book.storage || duplicate.storage,
+            purchasePrice: book.purchasePrice ?? duplicate.purchasePrice,
+            recommendedPrice: Math.max(book.recommendedPrice, duplicate.recommendedPrice),
+            listings: mergedListings,
+          };
+        }),
+    );
+    setListingPresence((current) => {
+      const next = current.map((listing) => (listing.bookId === duplicateId ? { ...listing, bookId: keepId } : listing));
+      persistListingPresence(next);
+      return next;
+    });
+    setSales((current) => current.map((sale) => (sale.bookId === duplicateId ? { ...sale, bookId: keepId } : sale)));
+    setFilterMessage(`Dublis sujungtas: ${decodeText(duplicate.title)} → ${decodeText(keep.title)}.`);
+  }
+
   async function runTrackingSync() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     let wpFound = books.length;
@@ -1208,6 +1277,9 @@ export default function Home() {
                   </div>
                 </details>
                 {filterMessage && <p className="xl:col-span-2 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-semibold text-[#166534]">{filterMessage}</p>}
+                {duplicates.length > 0 && (
+                  <DuplicatePanel duplicates={duplicates} mergeDuplicateBook={mergeDuplicateBook} />
+                )}
               </div>
               <div className="divide-y divide-[#e2e8f0]">
                 {filteredUnmatched.map((listing) => (
@@ -2081,6 +2153,35 @@ function UnmatchedListingRow({ listing, books, attach }: { listing: UnmatchedLis
         <button type="button" disabled={!bookId} onClick={() => attach(listing.id, bookId)} className="h-12 rounded-xl bg-[#e87500] px-5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Sujungti</button>
       </div>
     </article>
+  );
+}
+
+function DuplicatePanel({ duplicates, mergeDuplicateBook }: { duplicates: DuplicateCandidate[]; mergeDuplicateBook: (keepId: string, duplicateId: string) => void }) {
+  return (
+    <section className="xl:col-span-2 rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-base font-black text-[#020817]">Galimi dubliai</h3>
+        <span className="text-sm font-semibold text-[#9a3412]">{duplicates.length} reikia patikrinti</span>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {duplicates.slice(0, 6).map((candidate) => (
+          <div key={`${candidate.keep.id}-${candidate.duplicate.id}`} className="grid gap-2 rounded-lg border border-[#fed7aa] bg-white p-3 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="text-sm text-[#475569]">
+              <p className="font-black text-[#020817]">{decodeText(candidate.keep.title)}</p>
+              <p className="mt-1">Galimas dublis: <b>{decodeText(candidate.duplicate.title)}</b></p>
+              <p className="mt-1">{candidate.reason}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => mergeDuplicateBook(candidate.keep.id, candidate.duplicate.id)}
+              className="h-10 rounded-md bg-[#e87500] px-4 text-sm font-semibold text-white"
+            >
+              Sujungti
+            </button>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
