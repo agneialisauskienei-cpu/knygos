@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+const APP_PASSWORD = "knygos2026";
+
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
@@ -300,6 +302,8 @@ function daysBetween(start: string, end: string) {
 }
 
 export default function Home() {
+  const [unlocked, setUnlocked] = useState(() => (typeof window === "undefined" ? false : window.sessionStorage.getItem("knygu-apskaita-auth") === "ok"));
+  const [passwordError, setPasswordError] = useState("");
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooks] = useState(booksSeed);
   const [sales, setSales] = useState(salesSeed);
@@ -560,6 +564,20 @@ export default function Home() {
     setWantedContacts((current) => current.map((contact) => (contact.id === id ? { ...contact, status } : contact)));
   }
 
+  function unlockApp(formData: FormData) {
+    if (String(formData.get("password")) === APP_PASSWORD) {
+      window.sessionStorage.setItem("knygu-apskaita-auth", "ok");
+      setUnlocked(true);
+      setPasswordError("");
+      return;
+    }
+    setPasswordError("Slaptažodis neteisingas");
+  }
+
+  if (!unlocked) {
+    return <PasswordScreen error={passwordError} onSubmit={unlockApp} />;
+  }
+
   return (
     <main className="min-h-screen bg-white pb-24 text-[#020817] lg:pb-0">
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
@@ -576,7 +594,7 @@ export default function Home() {
             <TabButton label="Pranešimai" active={tab === "pranešimai"} onClick={() => setTab("pranešimai")} />
             <TabButton label="Įvedimas" active={tab === "ivedimas"} onClick={() => setTab("ivedimas")} />
           </div>
-          <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-4 py-3 text-base font-semibold text-[#334155] hover:border-[#ff8200]">
+          <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-4 py-3 text-base font-semibold text-[#334155] hover:border-[#c65f00]">
             Įjungti pranešimus
           </button>
         </div>
@@ -626,6 +644,24 @@ export default function Home() {
   );
 }
 
+function PasswordScreen({ error, onSubmit }: { error: string; onSubmit: (formData: FormData) => void }) {
+  return (
+    <main className="grid min-h-screen place-items-center bg-white p-5 text-[#020817]">
+      <form action={onSubmit} className="w-full max-w-md rounded-2xl border border-[#c65f00] bg-white p-7 shadow-[0_18px_60px_rgba(15,23,42,0.12)]">
+        <p className="text-sm font-black uppercase tracking-[0.28em] text-[#c65f00]">Privati programa</p>
+        <h1 className="mt-4 text-3xl font-black tracking-[-0.04em]">Knygų prekybos apskaita</h1>
+        <p className="mt-3 text-base text-[#475569]">Įveskite slaptažodį, kad atsidarytų užduotys, kalendorius ir knygų apskaita.</p>
+        <label className="mt-6 grid gap-2">
+          <span className="text-sm font-bold text-[#475569]">Slaptažodis</span>
+          <input name="password" type="password" autoComplete="current-password" className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#c65f00] focus:ring-4 focus:ring-[#c65f00]/15" required />
+        </label>
+        {error && <p className="mt-3 rounded-lg bg-[#fff4e8] px-3 py-2 text-sm font-semibold text-[#9a3412]">{error}</p>}
+        <button className="mt-6 h-12 w-full rounded-xl bg-[#c65f00] text-base font-bold text-white hover:bg-[#a94f00]">Prisijungti</button>
+      </form>
+    </main>
+  );
+}
+
 function Metric({ label, value, danger }: { label: string; value: string | number; danger?: boolean }) {
   return (
     <div className={`rounded-xl border p-4 ${danger ? "border-[#f7f3f2] bg-white" : "border-[#e2e8f0] bg-white"}`}>
@@ -636,12 +672,12 @@ function Metric({ label, value, danger }: { label: string; value: string | numbe
 }
 
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button onClick={onClick} className={`rounded-xl px-5 py-3 text-base font-medium ${active ? "bg-[#ff8200] text-white" : "text-[#475569] hover:bg-white"}`}>{label}</button>;
+  return <button onClick={onClick} className={`rounded-xl px-5 py-3 text-base font-medium ${active ? "bg-[#c65f00] text-white" : "text-[#475569] hover:bg-white"}`}>{label}</button>;
 }
 
 function MobileNav({ label, active, onClick, badge }: { label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`relative rounded-md px-2 py-2 text-sm font-semibold ${active ? "bg-[#ff8200] text-white" : "text-[#475569]"}`}>
+    <button onClick={onClick} className={`relative rounded-md px-2 py-2 text-sm font-semibold ${active ? "bg-[#c65f00] text-white" : "text-[#475569]"}`}>
       {label}
       {!!badge && <span className="absolute right-2 top-1 rounded-full bg-[#b42318] px-1.5 text-[10px] text-white">{badge}</span>}
     </button>
@@ -651,18 +687,18 @@ function MobileNav({ label, active, onClick, badge }: { label: string; active: b
 function DashboardSidebar({ stats, query, setQuery, setTab, enableNotifications, selectedSource, setSelectedSource }: { stats: { todaySold: number; open: number; husband: number; pickupsToday: number; trackingIssues: number; stock: number; monthRevenue: number; monthProfit: number }; query: string; setQuery: (value: string) => void; setTab: (tab: Tab) => void; enableNotifications: () => void; selectedSource: SourceFilter; setSelectedSource: (source: SourceFilter) => void }) {
   return (
     <aside className="border-b border-[#e2e8f0] bg-white p-5 lg:h-[calc(100vh-76px)] lg:border-b-0 lg:border-r lg:overflow-auto">
-      <p className="text-sm font-black uppercase tracking-[0.35em] text-[#ff8200]">Operacinis vaizdas</p>
+      <p className="text-sm font-black uppercase tracking-[0.35em] text-[#c65f00]">Operacinis vaizdas</p>
       <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] text-[#020817]">Supirkimų ir užduočių valdymas</h2>
 
       <div className="mt-8 grid gap-5">
         <label className="grid gap-2">
           <span className="text-sm font-bold text-[#475569]">Paieška</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Knyga arba platforma" className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#ff8200] focus:ring-4 focus:ring-[#f7f3f2]/35" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Knyga arba platforma" className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#c65f00] focus:ring-4 focus:ring-[#f7f3f2]/35" />
         </label>
 
         <label className="grid gap-2">
           <span className="text-sm font-bold text-[#475569]">Platforma</span>
-          <select value={selectedSource} onChange={(event) => setSelectedSource(event.target.value as SourceFilter)} className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#ff8200]">
+          <select value={selectedSource} onChange={(event) => setSelectedSource(event.target.value as SourceFilter)} className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#c65f00]">
             <option value="all">Visos</option>
             <option value="wp">WooCommerce</option>
             <option value="sena">Sena.lt</option>
@@ -675,7 +711,7 @@ function DashboardSidebar({ stats, query, setQuery, setTab, enableNotifications,
         <FilterSelect label="Atsakingas" options={["Visi", "Agnė", "Almantas", "Abu"]} />
         <FilterSelect label="Veiksmas" options={["Visi", "Paskambinti", "Paėmimas", "Paslėpti skelbimą", "Papildyti savikainą"]} />
 
-        <button onClick={() => setTab("sekimas")} className="h-12 rounded-xl bg-[#ff8200] px-4 text-left text-base font-semibold text-white">Atnaujinti platformų sekimą</button>
+        <button onClick={() => setTab("sekimas")} className="h-12 rounded-xl bg-[#c65f00] px-4 text-left text-base font-semibold text-white">Atnaujinti platformų sekimą</button>
         <button onClick={() => setTab("kalendorius")} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Planuoti paėmimą</button>
         <button onClick={enableNotifications} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Įjungti telefono pranešimus</button>
 
@@ -694,7 +730,7 @@ function FilterSelect({ label, options }: { label: string; options: string[] }) 
   return (
     <label className="grid gap-2">
       <span className="text-sm font-bold text-[#475569]">{label}</span>
-      <select className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#ff8200]">
+      <select className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#c65f00]">
         {options.map((option) => <option key={option}>{option}</option>)}
       </select>
     </label>
@@ -715,12 +751,12 @@ function TrackingScreen({ books, sources, presence, selectedSource, runTrackingS
             <h2 className="text-2xl font-black tracking-[-0.03em]">Kur įkelta</h2>
             <p className="mt-1 text-base text-[#475569]">WP, Sena.lt ir trys Vinted paskyros tikrinamos kaip atskiri šaltiniai.</p>
           </div>
-          <button onClick={runTrackingSync} className="h-10 rounded-md bg-[#ff8200] px-4 text-base font-semibold text-white">Atnaujinti sekimą</button>
+          <button onClick={runTrackingSync} className="h-10 rounded-md bg-[#c65f00] px-4 text-base font-semibold text-white">Atnaujinti sekimą</button>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {sources.map((source) => (
-            <article key={source.key} className="rounded-md border border-[#ff8200] bg-white p-3">
-              <p className="text-sm font-black uppercase text-[#ed562f]">{source.type}</p>
+            <article key={source.key} className="rounded-md border border-[#c65f00] bg-white p-3">
+              <p className="text-sm font-black uppercase text-[#b84a24]">{source.type}</p>
               <h3 className="mt-1 font-semibold">{source.name}</h3>
               <p className="mt-1 text-base text-[#475569]">{source.account}</p>
               <p className="mt-2 text-xs text-[#475569]">{source.method}</p>
@@ -737,7 +773,7 @@ function TrackingScreen({ books, sources, presence, selectedSource, runTrackingS
         </div>
       </div>
 
-      <div className="rounded-xl border border-[#ff8200] bg-white">
+      <div className="rounded-xl border border-[#c65f00] bg-white">
         <div className="border-b border-[#e2e8f0] p-4">
           <h2 className="text-2xl font-black tracking-[-0.03em]">Įkelta {selectedSourceName}</h2>
           <p className="mt-1 text-base text-[#475569]">Pasirink platformą kairėje ir čia matysi, kas joje yra įkelta.</p>
@@ -749,7 +785,7 @@ function TrackingScreen({ books, sources, presence, selectedSource, runTrackingS
             return (
               <article key={`${listing.bookId}-${listing.source}`} className="grid gap-3 p-4 lg:grid-cols-[1fr_180px_160px_160px] lg:items-center">
                 <div>
-                  <p className="text-sm font-black uppercase text-[#ed562f]">{source?.name}</p>
+                  <p className="text-sm font-black uppercase text-[#b84a24]">{source?.name}</p>
                   <h3 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#020817]">{book?.title ?? "Knyga"}</h3>
                 </div>
                 <p className="text-base text-[#475569]">Būsena: <b>{listing.status}</b></p>
@@ -806,12 +842,12 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
   return (
     <section className="grid gap-5 xl:grid-cols-[380px_1fr]">
       <form action={addWantedContact} className="rounded-xl border border-[#e2e8f0] bg-white p-5">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#ff8200]">Ieško</p>
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#c65f00]">Ieško</p>
         <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Naujas ieškantis</h2>
         <div className="mt-5 grid gap-3">
           <input name="name" placeholder="Vardas" className="field" required />
           <input name="contact" placeholder="Telefonas, el. paštas arba nuoroda" className="field" required />
-          <textarea name="lookingFor" placeholder="Kokių knygų ieško / laukia" className="min-h-24 rounded-xl border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#ff8200]" required />
+          <textarea name="lookingFor" placeholder="Kokių knygų ieško / laukia" className="min-h-24 rounded-xl border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#c65f00]" required />
           <div className="grid grid-cols-2 gap-2">
             <input name="waitingSince" type="date" defaultValue="2026-08-12" className="field" required />
             <input name="reminderDate" type="date" defaultValue="2026-08-15" className="field" required />
@@ -831,8 +867,8 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
               <option>Abu</option>
             </select>
           </div>
-          <textarea name="notes" placeholder="Pastabos" className="min-h-20 rounded-xl border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#ff8200]" />
-          <button className="h-12 rounded-xl bg-[#ff8200] text-base font-semibold text-white">Išsaugoti</button>
+          <textarea name="notes" placeholder="Pastabos" className="min-h-20 rounded-xl border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#c65f00]" />
+          <button className="h-12 rounded-xl bg-[#c65f00] text-base font-semibold text-white">Išsaugoti</button>
         </div>
       </form>
 
@@ -846,7 +882,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
             <article key={contact.id} className={`p-5 ${contact.status === "uždaryta" ? "opacity-55" : ""}`}>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase tracking-[0.18em] text-[#ed562f]">{contact.channel} / {contact.assignee}</p>
+                  <p className="text-sm font-black uppercase tracking-[0.18em] text-[#b84a24]">{contact.channel} / {contact.assignee}</p>
                   <h3 className="mt-1 text-xl font-black tracking-[-0.02em] text-[#020817]">{contact.name}</h3>
                   <div className="mt-2 grid gap-1 text-base text-[#475569]">
                     <span>Kontaktas: <b>{contact.contact}</b></span>
@@ -861,7 +897,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
               <div className="mt-4 flex flex-wrap gap-2">
                 {contact.status !== "pranešta" && <button onClick={() => updateWantedStatus(contact.id, "pranešta")} className="rounded-xl border border-[#e2e8f0] px-3 py-2 text-base font-semibold">Pranešta</button>}
                 {contact.status !== "rasta" && <button onClick={() => updateWantedStatus(contact.id, "rasta")} className="rounded-xl border border-[#e2e8f0] px-3 py-2 text-base font-semibold">Rasta</button>}
-                {contact.status !== "uždaryta" && <button onClick={() => updateWantedStatus(contact.id, "uždaryta")} className="rounded-xl bg-[#ff8200] px-3 py-2 text-base font-semibold text-white">Uždaryti</button>}
+                {contact.status !== "uždaryta" && <button onClick={() => updateWantedStatus(contact.id, "uždaryta")} className="rounded-xl bg-[#c65f00] px-3 py-2 text-base font-semibold text-white">Uždaryti</button>}
               </div>
             </article>
           ))}
@@ -892,7 +928,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
     <section className="grid gap-5">
     <div className="rounded-xl border border-[#e2e8f0] bg-white">
       <div className="border-b border-[#e2e8f0] p-5">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#ff8200]">Apskaita</p>
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#c65f00]">Apskaita</p>
         <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Pardavimų statistika</h2>
         <p className="mt-2 text-base text-[#475569]">Kiek kartų parduota, vidutinė kaina ir per kiek dienų knyga pajudėjo.</p>
       </div>
@@ -922,7 +958,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
           return (
             <article key={sale.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_160px_160px_160px] lg:items-center">
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#ed562f]">{sale.platform} / {sale.soldAt}</p>
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#b84a24]">{sale.platform} / {sale.soldAt}</p>
                 <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">{book?.title ?? "Knyga"}</h3>
               </div>
               <p className="text-base text-[#475569]">Kiekis: <b>{sale.quantity}</b></p>
@@ -930,13 +966,13 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
                 <form action={saveSalePrice} className="flex gap-2">
                   <input type="hidden" name="id" value={sale.id} />
                   <input name="salePrice" type="number" step="0.01" defaultValue={sale.salePrice} className="field max-w-32" />
-                  <button className="rounded-md bg-[#ff8200] px-3 text-sm font-semibold text-white">OK</button>
+                  <button className="rounded-md bg-[#c65f00] px-3 text-sm font-semibold text-white">OK</button>
                 </form>
               ) : (
                 <p className="text-base text-[#475569]">Suma: <b>{money(sale.salePrice)}</b></p>
               )}
               <p className="text-base text-[#475569]">Pelnas: <b>{saleProfit(sale) === undefined ? "nežinomas" : money(saleProfit(sale) ?? 0)}</b></p>
-              {editingSaleId !== sale.id && <button onClick={() => setEditingSaleId(sale.id)} className="rounded-md border border-[#ff8200] px-3 py-2 text-sm font-semibold text-[#ea580c] lg:col-start-4">Keisti kainą</button>}
+              {editingSaleId !== sale.id && <button onClick={() => setEditingSaleId(sale.id)} className="rounded-md border border-[#c65f00] px-3 py-2 text-sm font-semibold text-[#a94f00] lg:col-start-4">Keisti kainą</button>}
             </article>
           );
         })}
@@ -994,7 +1030,7 @@ function HistoryScreen({ books, sales, items, calendar, contacts, sources }: { b
     <section className="rounded-xl border border-[#e2e8f0] bg-white">
       <div className="flex flex-col gap-4 border-b border-[#e2e8f0] p-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-[#ff8200]">Žurnalas</p>
+          <p className="text-sm font-black uppercase tracking-[0.3em] text-[#c65f00]">Žurnalas</p>
           <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-[#020817]">Visa istorija</h2>
           <p className="mt-2 text-base text-[#475569]">Bendra veiksmų, užduočių, ieškančių žmonių, pardavimų ir sekimo eiga.</p>
         </div>
@@ -1012,7 +1048,7 @@ function HistoryScreen({ books, sales, items, calendar, contacts, sources }: { b
         {filteredRows.map((row) => (
           <article key={row.id} className="grid gap-3 p-5 lg:grid-cols-[170px_170px_1fr]">
             <p className="text-base font-black text-[#020817]">{row.date}</p>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#ed562f]">{row.type}</p>
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-[#b84a24]">{row.type}</p>
             <div>
               <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{row.title}</h3>
               <p className="mt-1 text-base text-[#475569]">{row.detail}</p>
@@ -1047,12 +1083,12 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
       <div className="border-b border-[#e2e8f0] p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pranešimai ir užduotys</h2>
         <p className="mt-1 text-base text-[#475569]">Supirkimo formos, Gmail užklausos, atsiėmimai ir priminimai.</p>
-        <form action={addWorkItem} className="mt-5 grid gap-3 rounded-xl border border-[#ff8200] p-4">
+        <form action={addWorkItem} className="mt-5 grid gap-3 rounded-xl border border-[#c65f00] p-4">
           <div className="grid gap-3 lg:grid-cols-2">
             <input name="title" placeholder="Nauja užduotis" className="field" required />
             <input name="source" placeholder="Šaltinis, pvz. Gmail" className="field" required />
           </div>
-          <textarea name="detail" placeholder="Aprašymas" className="min-h-20 rounded-md border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#ff8200]" required />
+          <textarea name="detail" placeholder="Aprašymas" className="min-h-20 rounded-md border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#c65f00]" required />
           <div className="grid gap-3 lg:grid-cols-4">
             <select name="kind" defaultValue="reminder" className="field">
               <option value="buy-request">Supirkimas</option>
@@ -1076,7 +1112,7 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
             <input name="urgent" type="checkbox" />
             Skubu
           </label>
-          <button className="h-10 w-fit rounded-md bg-[#ff8200] px-5 text-base font-semibold text-white">Pridėti</button>
+          <button className="h-10 w-fit rounded-md bg-[#c65f00] px-5 text-base font-semibold text-white">Pridėti</button>
         </form>
       </div>
       <div className="divide-y divide-[#e2e8f0]">
@@ -1087,7 +1123,7 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
               <input name="title" defaultValue={item.title} className="field" required />
               <input name="source" defaultValue={item.source} className="field" required />
             </div>
-            <textarea name="detail" defaultValue={item.detail} className="min-h-20 rounded-md border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#ff8200]" required />
+            <textarea name="detail" defaultValue={item.detail} className="min-h-20 rounded-md border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#c65f00]" required />
             <div className="grid gap-3 lg:grid-cols-4">
               <select name="kind" defaultValue={item.kind} className="field">
                 <option value="buy-request">Supirkimas</option>
@@ -1112,7 +1148,7 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
               Skubu
             </label>
             <div className="flex flex-wrap gap-2">
-              <button className="rounded-md bg-[#ff8200] px-4 py-2 text-base font-semibold text-white">Išsaugoti</button>
+              <button className="rounded-md bg-[#c65f00] px-4 py-2 text-base font-semibold text-white">Išsaugoti</button>
               <button type="button" onClick={() => setEditingId(null)} className="rounded-md border border-[#e2e8f0] px-4 py-2 text-base font-semibold">Atšaukti</button>
             </div>
           </form>
@@ -1120,7 +1156,7 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
           <article key={item.id} className={`p-4 ${item.status === "atlikta" ? "opacity-55" : ""}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-black uppercase text-[#ed562f]">{item.source} / {item.assignee}</p>
+                <p className="text-sm font-black uppercase text-[#b84a24]">{item.source} / {item.assignee}</p>
                 <h3 className="mt-1 font-semibold">{item.title}</h3>
                 <p className="mt-1 text-base text-[#475569]">{item.detail}</p>
               </div>
@@ -1129,9 +1165,9 @@ function NotificationPanel({ items, completeItem, assignToHusband, addWorkItem, 
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className="rounded-full bg-white px-2.5 py-1 text-sm font-semibold text-[#475569]">Terminas: {item.due}</span>
               <span className="rounded-full bg-white px-2.5 py-1 text-sm font-semibold text-[#475569]">Būsena: {item.status}</span>
-              {item.status !== "atlikta" && <button onClick={() => completeItem(item.id)} className="rounded-md bg-[#ff8200] px-3 py-1.5 text-sm font-semibold text-white">Atlikta</button>}
+              {item.status !== "atlikta" && <button onClick={() => completeItem(item.id)} className="rounded-md bg-[#c65f00] px-3 py-1.5 text-sm font-semibold text-white">Atlikta</button>}
               {item.assignee !== "Almantas" && item.status !== "atlikta" && <button onClick={() => assignToHusband(item.id)} className="rounded-md border border-[#e2e8f0] px-3 py-1.5 text-sm font-semibold">Almantui paskambinti</button>}
-              <button onClick={() => setEditingId(item.id)} className="rounded-md border border-[#ff8200] px-3 py-1.5 text-sm font-semibold text-[#ea580c]">Redaguoti</button>
+              <button onClick={() => setEditingId(item.id)} className="rounded-md border border-[#c65f00] px-3 py-1.5 text-sm font-semibold text-[#a94f00]">Redaguoti</button>
               <button onClick={() => deleteWorkItem(item.id)} className="rounded-md border border-[#e2e8f0] px-3 py-1.5 text-sm font-semibold">Ištrinti</button>
             </div>
           </article>
@@ -1167,8 +1203,8 @@ function CalendarScreen({ calendar, addCalendarEvent, updateStatus, updateEvent 
             <option>Agne</option>
             <option>Abu</option>
           </select>
-          <textarea name="notes" placeholder="Pastabos: ką paimti, ar jau kalbėta, kur privažiuoti" className="min-h-24 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#ff8200]" />
-          <button className="h-10 rounded-md bg-[#ff8200] text-base font-semibold text-white">Išsaugoti kalendoriuje</button>
+          <textarea name="notes" placeholder="Pastabos: ką paimti, ar jau kalbėta, kur privažiuoti" className="min-h-24 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#c65f00]" />
+          <button className="h-10 rounded-md bg-[#c65f00] text-base font-semibold text-white">Išsaugoti kalendoriuje</button>
         </div>
       </form>
       <CalendarPanel calendar={calendar} updateStatus={updateStatus} updateEvent={updateEvent} />
@@ -1183,10 +1219,10 @@ function MonthCalendar({ calendar }: { calendar: CalendarEvent[] }) {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   return (
-    <section className="rounded-xl border border-[#ff8200] bg-white">
+    <section className="rounded-xl border border-[#c65f00] bg-white">
       <div className="flex flex-col gap-2 border-b border-[#e2e8f0] p-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.3em] text-[#ff8200]">Kalendorius</p>
+          <p className="text-sm font-black uppercase tracking-[0.3em] text-[#c65f00]">Kalendorius</p>
           <h2 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[#020817]">2026 rugpjūtis</h2>
         </div>
         <p className="text-base text-[#475569]">Viso mėnesio paėmimai ir supirkimai vienoje vietoje.</p>
@@ -1203,7 +1239,7 @@ function MonthCalendar({ calendar }: { calendar: CalendarEvent[] }) {
               <p className="text-sm font-black text-[#020817]">{day.day}</p>
               <div className="mt-2 grid gap-1">
                 {dayEvents.map((event) => (
-                  <button key={event.id} onClick={() => setSelectedEvent(event)} className="rounded-lg border border-[#ff8200] bg-white px-2 py-1 text-left text-xs font-semibold text-[#020817] hover:bg-[#fff7ed]">
+                  <button key={event.id} onClick={() => setSelectedEvent(event)} className="rounded-lg border border-[#c65f00] bg-white px-2 py-1 text-left text-xs font-semibold text-[#020817] hover:bg-[#fff4e8]">
                     {event.time} {event.title}
                   </button>
                 ))}
@@ -1214,10 +1250,10 @@ function MonthCalendar({ calendar }: { calendar: CalendarEvent[] }) {
       </div>
       {selectedEvent && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#020817]/45 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-xl rounded-2xl border border-[#ff8200] bg-white shadow-2xl">
+          <div className="w-full max-w-xl rounded-2xl border border-[#c65f00] bg-white shadow-2xl">
             <div className="flex items-start justify-between gap-4 border-b border-[#e2e8f0] p-5">
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.2em] text-[#ed562f]">{selectedEvent.eventType}</p>
+                <p className="text-sm font-black uppercase tracking-[0.2em] text-[#b84a24]">{selectedEvent.eventType}</p>
                 <h3 className="mt-2 text-3xl font-black tracking-[-0.04em] text-[#020817]">{selectedEvent.title}</h3>
               </div>
               <button onClick={() => setSelectedEvent(null)} className="rounded-lg border border-[#e2e8f0] px-3 py-2 text-base font-semibold">Uždaryti</button>
@@ -1246,7 +1282,7 @@ function DetailLine({ label, value, href }: { label: string; value: string; href
   return (
     <div className="grid gap-1 rounded-xl border border-[#e2e8f0] p-4 sm:grid-cols-[160px_1fr] sm:items-center">
       <span className="text-sm font-bold uppercase text-[#475569]">{label}</span>
-      {href ? <a href={href} className="text-lg font-black text-[#ea580c]">{value}</a> : <span className="text-lg font-black text-[#020817]">{value}</span>}
+      {href ? <a href={href} className="text-lg font-black text-[#a94f00]">{value}</a> : <span className="text-lg font-black text-[#020817]">{value}</span>}
     </div>
   );
 }
@@ -1308,9 +1344,9 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
                   <option value="atlikta">atlikta</option>
                 </select>
               </div>
-              <textarea name="notes" defaultValue={event.notes} className="min-h-24 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#ff8200]" />
+              <textarea name="notes" defaultValue={event.notes} className="min-h-24 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#c65f00]" />
               <div className="flex flex-wrap gap-2">
-                <button className="rounded-md bg-[#ff8200] px-4 py-2 text-base font-semibold text-white">Išsaugoti</button>
+                <button className="rounded-md bg-[#c65f00] px-4 py-2 text-base font-semibold text-white">Išsaugoti</button>
                 <button type="button" onClick={() => setEditingId(null)} className="rounded-md border border-[#e2e8f0] px-4 py-2 text-base font-semibold">Atsaukti</button>
               </div>
             </form>
@@ -1318,12 +1354,12 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
             <article key={event.id} className={`p-4 ${event.status === "atlikta" ? "opacity-55" : ""}`}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase text-[#ed562f]">{event.date} / {event.time} / {event.assignee}</p>
+                  <p className="text-sm font-black uppercase text-[#b84a24]">{event.date} / {event.time} / {event.assignee}</p>
                   <h3 className="mt-1 font-semibold">{event.title}</h3>
                   <div className="mt-2 grid gap-1 text-base text-[#475569]">
                     <span>Tipas: <b>{event.eventType}</b></span>
                     <span>Adresas: <b>{event.address}</b></span>
-                    <span>Telefonas: <a className="font-semibold text-[#ea580c]" href={`tel:${event.phone}`}>{event.phone}</a></span>
+                    <span>Telefonas: <a className="font-semibold text-[#a94f00]" href={`tel:${event.phone}`}>{event.phone}</a></span>
                     <span>Sutarta kaina: <b>{money(event.agreedPrice)}</b></span>
                     <span>Pastabos: {event.notes || "nėra"}</span>
                   </div>
@@ -1331,10 +1367,10 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
                 <span className="w-fit rounded-full bg-white px-2.5 py-1 text-sm font-semibold text-[#475569]">{event.status}</span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={() => setEditingId(event.id)} className="rounded-md border border-[#ff8200] px-3 py-1.5 text-sm font-semibold text-[#ea580c]">Redaguoti</button>
+                <button onClick={() => setEditingId(event.id)} className="rounded-md border border-[#c65f00] px-3 py-1.5 text-sm font-semibold text-[#a94f00]">Redaguoti</button>
                 {event.status !== "paskambinta" && event.status !== "atlikta" && <button onClick={() => updateStatus(event.id, "paskambinta")} className="rounded-md border border-[#e2e8f0] px-3 py-1.5 text-sm font-semibold">Paskambinta</button>}
                 {event.status !== "paimta" && event.status !== "atlikta" && <button onClick={() => updateStatus(event.id, "paimta")} className="rounded-md border border-[#e2e8f0] px-3 py-1.5 text-sm font-semibold">Paimta</button>}
-                {event.status !== "atlikta" && <button onClick={() => updateStatus(event.id, "atlikta")} className="rounded-md bg-[#ff8200] px-3 py-1.5 text-sm font-semibold text-white">Atlikta</button>}
+                {event.status !== "atlikta" && <button onClick={() => updateStatus(event.id, "atlikta")} className="rounded-md bg-[#c65f00] px-3 py-1.5 text-sm font-semibold text-white">Atlikta</button>}
               </div>
             </article>
           ),
@@ -1349,7 +1385,7 @@ function WpPanel({ addWpRequest }: { addWpRequest: () => void }) {
     <section className="rounded-xl border border-[#e2e8f0] bg-white p-4">
       <h2 className="text-2xl font-black tracking-[-0.03em]">WP supirkimo forma</h2>
       <p className="mt-2 text-base text-[#475569]">Kai svetainėje ateina forma, čia atsiranda užduotis Almantui arba abiems.</p>
-      <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md border border-[#ff8200] text-base font-semibold text-[#ea580c]">Imituoti naują užklausą</button>
+      <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md border border-[#c65f00] text-base font-semibold text-[#a94f00]">Imituoti naują užklausą</button>
     </section>
   );
 }
@@ -1380,16 +1416,16 @@ function BookRow({ book, sales }: { book: Book; sales: Sale[] }) {
 function EntryPanel({ books, addSale, addWpRequest, addCalendarEvent, importBookBatch }: { books: Book[]; addSale: (data: FormData) => void; addWpRequest: () => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void }) {
   return (
     <section className="grid gap-5 lg:grid-cols-3">
-      <form action={importBookBatch} className="rounded-xl border border-[#ff8200] bg-white p-4 lg:col-span-3">
+      <form action={importBookBatch} className="rounded-xl border border-[#c65f00] bg-white p-4 lg:col-span-3">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Įmesti knygų sąrašą</h2>
         <p className="mt-2 text-base text-[#475569]">Viena eilutė: pavadinimas; kiekis; eilutės pirkimo suma. Jei sumos nenurodysi, savikaina bus paskirstyta iš bendros sumos.</p>
         <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_180px_180px_180px]">
-          <textarea name="bookList" placeholder={"Šachta; 2; 6,40\nMetai be sekmadienių; 4\nKita knyga; 1; 2,00"} className="min-h-36 rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#ff8200]" required />
+          <textarea name="bookList" placeholder={"Šachta; 2; 6,40\nMetai be sekmadienių; 4\nKita knyga; 1; 2,00"} className="min-h-36 rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#c65f00]" required />
           <input name="totalCost" type="number" step="0.01" placeholder="Bendra suma" className="field" />
           <input name="acquiredAt" type="date" defaultValue="2026-08-12" className="field" />
           <input name="storage" placeholder="Vieta sandėlyje" className="field" />
         </div>
-        <button className="mt-4 h-10 rounded-md bg-[#ff8200] px-5 text-base font-semibold text-white">Importuoti ir paskaičiuoti savikainą</button>
+        <button className="mt-4 h-10 rounded-md bg-[#c65f00] px-5 text-base font-semibold text-white">Importuoti ir paskaičiuoti savikainą</button>
       </form>
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
@@ -1403,13 +1439,13 @@ function EntryPanel({ books, addSale, addWpRequest, addCalendarEvent, importBook
             <input name="fees" type="number" step="0.01" placeholder="Mokestis" className="field" />
             <input name="packing" type="number" step="0.01" placeholder="Pakavimas" className="field" />
           </div>
-          <button className="h-10 rounded-md bg-[#ff8200] text-base font-semibold text-white">Išsaugoti ir sukurti pranešimą</button>
+          <button className="h-10 rounded-md bg-[#c65f00] text-base font-semibold text-white">Išsaugoti ir sukurti pranešimą</button>
         </div>
       </form>
       <section className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Nauja supirkimo užklausa</h2>
         <p className="mt-2 text-base text-[#475569]">Skirta testuoti, kaip ateitų užklausa iš WordPress formos.</p>
-        <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md bg-[#ff8200] text-base font-semibold text-white">Pridėti WP užklausą Almantui</button>
+        <button onClick={addWpRequest} className="mt-4 h-10 w-full rounded-md bg-[#c65f00] text-base font-semibold text-white">Pridėti WP užklausą Almantui</button>
       </section>
       <form action={addCalendarEvent} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti paėmimą / atsiėmimą</h2>
@@ -1432,8 +1468,8 @@ function EntryPanel({ books, addSale, addWpRequest, addCalendarEvent, importBook
             <option>Agne</option>
             <option>Abu</option>
           </select>
-          <textarea name="notes" placeholder="Pastabos" className="min-h-20 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#ff8200]" />
-          <button className="h-10 rounded-md bg-[#ff8200] text-base font-semibold text-white">Išsaugoti paėmimą</button>
+          <textarea name="notes" placeholder="Pastabos" className="min-h-20 rounded-md border border-[#e2e8f0] bg-[#ffffff] p-3 text-sm outline-none focus:border-[#c65f00]" />
+          <button className="h-10 rounded-md bg-[#c65f00] text-base font-semibold text-white">Išsaugoti paėmimą</button>
         </div>
       </form>
     </section>
