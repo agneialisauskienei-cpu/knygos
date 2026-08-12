@@ -5,7 +5,6 @@ import { booksSeed } from "./books-data";
 import { senaSales, senaUnmatchedSales } from "./sena-sales";
 import { agneali1990UnmatchedSales, agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
-const APP_PASSWORD = "knygos2026";
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
@@ -257,8 +256,6 @@ function persistBooks(books: Book[]) {
 }
 
 export default function Home() {
-  const [unlocked, setUnlocked] = useState(() => (typeof window === "undefined" ? false : window.sessionStorage.getItem("knygu-apskaita-auth") === "ok"));
-  const [passwordError, setPasswordError] = useState("");
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooksState] = useState<Book[]>(loadBooks);
   const [sales, setSales] = useState(salesSeed);
@@ -737,26 +734,6 @@ export default function Home() {
     setWantedContacts((current) => current.map((contact) => (contact.id === id ? { ...contact, status } : contact)));
   }
 
-  function unlockApp(formData: FormData) {
-    if (String(formData.get("password")) === APP_PASSWORD) {
-      window.sessionStorage.setItem("knygu-apskaita-auth", "ok");
-      setUnlocked(true);
-      setPasswordError("");
-      return;
-    }
-    setPasswordError("Slaptažodis neteisingas");
-  }
-
-  function logout() {
-    window.sessionStorage.removeItem("knygu-apskaita-auth");
-    setUnlocked(false);
-    setPasswordError("");
-  }
-
-  if (!unlocked) {
-    return <PasswordScreen error={passwordError} onSubmit={unlockApp} />;
-  }
-
   return (
     <main className="min-h-screen bg-white pb-24 text-[#020817] lg:pb-0">
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
@@ -768,9 +745,6 @@ export default function Home() {
           </div>
           <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm font-semibold text-[#334155] hover:border-[#e87500]">
             Įjungti pranešimus
-          </button>
-          <button onClick={logout} className="rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm font-semibold text-[#334155] hover:border-[#e87500]">
-            Atsijungti
           </button>
         </div>
       </header>
