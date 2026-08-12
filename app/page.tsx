@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
+import { booksSeed } from "./books-data";
 
 const APP_PASSWORD = "knygos2026";
 
@@ -93,53 +94,6 @@ type ListingPresence = {
   url: string;
   lastSeen: string;
 };
-
-const booksSeed: Book[] = [
-  {
-    id: "b1",
-    title: "Šachta",
-    image: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=500&q=80",
-    stock: 2,
-    storage: "Lentyna A2",
-    acquiredAt: "2026-07-20",
-    purchasePrice: 3.2,
-    recommendedPrice: 8,
-    listings: [
-      { platform: "WooCommerce", status: "aktyvu", price: 8, sales: 2 },
-      { platform: "Vinted", status: "aktyvu", price: 7, sales: 2 },
-      { platform: "Sena.lt", status: "parduota", price: 8.5, sales: 1 },
-    ],
-  },
-  {
-    id: "b2",
-    title: "Metai be sekmadienių",
-    image: "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=500&q=80",
-    stock: 4,
-    storage: "Dėžutė M3",
-    acquiredAt: "2026-07-28",
-    purchasePrice: 2.7,
-    recommendedPrice: 6.5,
-    listings: [
-      { platform: "WooCommerce", status: "aktyvu", price: 6.5, sales: 1 },
-      { platform: "Vinted", status: "neikelta", price: 0, sales: 0 },
-      { platform: "Sena.lt", status: "aktyvu", price: 6, sales: 0 },
-    ],
-  },
-  {
-    id: "b3",
-    title: "Laimingi žmonės skaito ir geria kavą",
-    image: "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=500&q=80",
-    stock: 0,
-    storage: "Lentyna C1",
-    acquiredAt: "2026-07-10",
-    recommendedPrice: 9,
-    listings: [
-      { platform: "WooCommerce", status: "parduota", price: 9, sales: 1 },
-      { platform: "Vinted", status: "aktyvu", price: 8, sales: 1 },
-      { platform: "Sena.lt", status: "neikelta", price: 0, sales: 0 },
-    ],
-  },
-];
 
 const salesSeed: Sale[] = [
   { id: "s1", bookId: "b1", platform: "WooCommerce", soldAt: "2026-08-12", quantity: 1, salePrice: 8, purchaseCost: 3.2, fees: 0.4, packing: 0.25 },
@@ -305,7 +259,7 @@ export default function Home() {
   const [unlocked, setUnlocked] = useState(() => (typeof window === "undefined" ? false : window.sessionStorage.getItem("knygu-apskaita-auth") === "ok"));
   const [passwordError, setPasswordError] = useState("");
   const [tab, setTab] = useState<Tab>("šiandien");
-  const [books, setBooks] = useState(booksSeed);
+  const [books, setBooks] = useState<Book[]>(booksSeed as Book[]);
   const [sales, setSales] = useState(salesSeed);
   const [items, setItems] = useState(workSeed);
   const [calendar, setCalendar] = useState(calendarSeed);
