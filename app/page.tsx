@@ -11,6 +11,7 @@ type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
 type StatusFilter = "all" | "aktyvu" | "parduota" | "neįkelta" | "reikia patikrinti" | "juodraščiai";
 type SalesCountFilter = "all" | "0" | "1" | "2-4" | "5+";
+type SortFilter = "title" | "priceDesc" | "priceAsc" | "soldDesc" | "stockAsc" | "newest";
 type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas" | "filtrai";
 type Assignee = "Agne" | "Almantas" | "Abu";
 
@@ -125,9 +126,9 @@ const wantedContactsSeed: WantedContact[] = [];
 const trackingSeed: TrackingSource[] = [
   { key: "wp", name: "skaitytaknyga.lt", type: "WooCommerce", account: "WP / WooCommerce", method: "WooCommerce REST API", status: "prijungta", lastChecked: "šiandien 10:42", found: 128, issues: 1 },
   { key: "sena", name: "Sena.lt", type: "Sena.lt", account: "skaitytaknygalt", method: "https://www.sena.lt/vartotojas/skaitytaknygalt", status: "prijungta", lastChecked: "vakar 18:05", found: 42, issues: 3 },
-  { key: "vinted1", name: "Vinted #1", type: "Vinted", account: "agneali1990", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:20", found: 71, issues: 2 },
-  { key: "vinted2", name: "Vinted #2", type: "Vinted", account: "almisali", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:18", found: 36, issues: 0 },
-  { key: "vinted3", name: "Vinted #3", type: "Vinted", account: "wp.vizija", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "nepatikrinta", found: 0, issues: 0 },
+  { key: "vinted1", name: "agneali1990", type: "Vinted", account: "agneali1990", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:20", found: 71, issues: 2 },
+  { key: "vinted2", name: "almisali", type: "Vinted", account: "almisali", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:18", found: 36, issues: 0 },
+  { key: "vinted3", name: "wp.vizija", type: "Vinted", account: "wp.vizija", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "nepatikrinta", found: 0, issues: 0 },
 ];
 
 const listingPresenceSeed: ListingPresence[] = [];
@@ -145,6 +146,16 @@ const august2026Days = Array.from({ length: 31 }, (_, index) => {
 
 function money(value: number) {
   return `${value.toFixed(2).replace(".", ",")} Eur`;
+}
+
+function decodeText(value: string) {
+  return value
+    .replace(/&#8211;|&ndash;/g, "–")
+    .replace(/&#8212;|&mdash;/g, "—")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ");
 }
 
 function saleProfit(sale: Sale) {
@@ -214,6 +225,7 @@ export default function Home() {
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [salesCountFilter, setSalesCountFilter] = useState<SalesCountFilter>("all");
+  const [sortFilter, setSortFilter] = useState<SortFilter>("title");
   const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
   const [syncingWp, setSyncingWp] = useState(false);
 
@@ -233,7 +245,8 @@ export default function Home() {
   }, [books, sales, items, calendar, trackingSources, wantedContacts]);
 
   const filteredBooks = books.filter((book) => {
-    const matchesQuery = book.title.toLowerCase().includes(query.toLowerCase());
+    const title = decodeText(book.title);
+    const matchesQuery = title.toLowerCase().includes(query.toLowerCase());
     const matchesSource =
       selectedSource === "all" ||
       listingPresence.some((listing) => listing.bookId === book.id && listing.source === selectedSource) ||
@@ -254,7 +267,17 @@ export default function Home() {
       (salesCountFilter === "5+" && soldTotal >= 5);
     return matchesQuery && matchesSource && matchesStatus && matchesSales;
   });
-  const visibleBooks = filteredBooks.slice(0, 120);
+  const sortedBooks = [...filteredBooks].sort((a, b) => {
+    const soldA = historicalSales(a) + sales.filter((sale) => sale.bookId === a.id).reduce((sum, sale) => sum + sale.quantity, 0);
+    const soldB = historicalSales(b) + sales.filter((sale) => sale.bookId === b.id).reduce((sum, sale) => sum + sale.quantity, 0);
+    if (sortFilter === "priceDesc") return b.recommendedPrice - a.recommendedPrice;
+    if (sortFilter === "priceAsc") return a.recommendedPrice - b.recommendedPrice;
+    if (sortFilter === "soldDesc") return soldB - soldA;
+    if (sortFilter === "stockAsc") return a.stock - b.stock;
+    if (sortFilter === "newest") return b.acquiredAt.localeCompare(a.acquiredAt);
+    return decodeText(a.title).localeCompare(decodeText(b.title), "lt");
+  });
+  const visibleBooks = sortedBooks.slice(0, 120);
 
   function saveBooks(updater: (current: Book[]) => Book[]) {
     setBooksState((current) => {
@@ -727,6 +750,8 @@ export default function Home() {
               setStatusFilter={setStatusFilter}
               salesCountFilter={salesCountFilter}
               setSalesCountFilter={setSalesCountFilter}
+              sortFilter={sortFilter}
+              setSortFilter={setSortFilter}
               total={books.length}
               filtered={filteredBooks.length}
               setTab={setTab}
@@ -734,7 +759,7 @@ export default function Home() {
           )}
           {tab === "knygos" && (
             <section className="rounded-xl border border-[#e2e8f0] bg-white">
-              <div className="grid gap-3 border-b border-[#e2e8f0] p-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
+              <div className="grid gap-3 border-b border-[#e2e8f0] p-4 xl:grid-cols-[1fr_auto] xl:items-center">
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų katalogas</h2>
                   <p className="mt-1 text-base text-[#475569]">
@@ -742,7 +767,56 @@ export default function Home() {
                   </p>
                 </div>
                 <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP ir Sena.lt"}</button>
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field lg:w-80" />
+                <details className="xl:col-span-2 rounded-xl border border-[#e87500] bg-white p-3">
+                  <summary className="cursor-pointer text-base font-black text-[#020817]">Filtrai ir rikiavimas</summary>
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field" />
+                    <select value={selectedSource} onChange={(event) => setSelectedSource(event.target.value as SourceFilter)} className="field">
+                      <option value="all">Visos platformos</option>
+                      <option value="wp">skaitytaknyga.lt</option>
+                      <option value="sena">Sena.lt</option>
+                      <option value="vinted1">agneali1990</option>
+                      <option value="vinted2">almisali</option>
+                      <option value="vinted3">wp.vizija</option>
+                    </select>
+                    <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="field">
+                      <option value="all">Visos būsenos</option>
+                      <option value="aktyvu">Aktyvu</option>
+                      <option value="parduota">Parduota</option>
+                      <option value="neįkelta">Neįkelta</option>
+                      <option value="juodraščiai">Juodraščiai</option>
+                      <option value="reikia patikrinti">Reikia patikrinti</option>
+                    </select>
+                    <select value={salesCountFilter} onChange={(event) => setSalesCountFilter(event.target.value as SalesCountFilter)} className="field">
+                      <option value="all">Visi pardavimai</option>
+                      <option value="0">Neparduota</option>
+                      <option value="1">Parduota 1 vnt.</option>
+                      <option value="2-4">Parduota 2-4 vnt.</option>
+                      <option value="5+">Parduota 5+ vnt.</option>
+                    </select>
+                    <select value={sortFilter} onChange={(event) => setSortFilter(event.target.value as SortFilter)} className="field">
+                      <option value="title">Pagal pavadinimą</option>
+                      <option value="priceDesc">Didžiausia kaina</option>
+                      <option value="priceAsc">Mažiausia kaina</option>
+                      <option value="soldDesc">Daugiausia parduota</option>
+                      <option value="stockAsc">Mažiausias likutis</option>
+                      <option value="newest">Naujausiai įsigyta</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuery("");
+                        setSelectedSource("all");
+                        setStatusFilter("all");
+                        setSalesCountFilter("all");
+                        setSortFilter("title");
+                      }}
+                      className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-base font-semibold text-[#334155]"
+                    >
+                      Išvalyti
+                    </button>
+                  </div>
+                </details>
               </div>
               <div className="divide-y divide-[#e2e8f0]">
                 {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
@@ -853,6 +927,8 @@ function FiltersScreen({
   setStatusFilter,
   salesCountFilter,
   setSalesCountFilter,
+  sortFilter,
+  setSortFilter,
   total,
   filtered,
   setTab,
@@ -865,6 +941,8 @@ function FiltersScreen({
   setStatusFilter: (value: StatusFilter) => void;
   salesCountFilter: SalesCountFilter;
   setSalesCountFilter: (value: SalesCountFilter) => void;
+  sortFilter: SortFilter;
+  setSortFilter: (value: SortFilter) => void;
   total: number;
   filtered: number;
   setTab: (tab: Tab) => void;
@@ -874,6 +952,7 @@ function FiltersScreen({
     setSelectedSource("all");
     setStatusFilter("all");
     setSalesCountFilter("all");
+    setSortFilter("title");
   }
 
   return (
@@ -892,9 +971,9 @@ function FiltersScreen({
             <option value="all">Visos</option>
             <option value="wp">WooCommerce</option>
             <option value="sena">Sena.lt</option>
-            <option value="vinted1">Vinted #1</option>
-            <option value="vinted2">Vinted #2</option>
-            <option value="vinted3">Vinted #3</option>
+            <option value="vinted1">agneali1990</option>
+            <option value="vinted2">almisali</option>
+            <option value="vinted3">wp.vizija</option>
           </select>
         </label>
         <label className="grid gap-2">
@@ -916,6 +995,17 @@ function FiltersScreen({
             <option value="1">Parduota 1 vnt.</option>
             <option value="2-4">Parduota 2-4 vnt.</option>
             <option value="5+">Parduota 5+ vnt.</option>
+          </select>
+        </label>
+        <label className="grid gap-2">
+          <span className="text-sm font-bold text-[#475569]">Rikiuoti</span>
+          <select value={sortFilter} onChange={(event) => setSortFilter(event.target.value as SortFilter)} className="field">
+            <option value="title">Pagal pavadinimą</option>
+            <option value="priceDesc">Didžiausia kaina</option>
+            <option value="priceAsc">Mažiausia kaina</option>
+            <option value="soldDesc">Daugiausia parduota</option>
+            <option value="stockAsc">Mažiausias likutis</option>
+            <option value="newest">Naujausiai įsigyta</option>
           </select>
         </label>
         <div className="flex items-end gap-3">
@@ -1026,7 +1116,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
         {bookStats.map(({ book, soldCount, revenue, avgPrice, avgDaysToSell }) => (
           <article key={book.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_150px_170px_180px] lg:items-center">
             <div>
-              <h3 className="text-2xl font-black tracking-[-0.03em] text-[#020817]">{book.title}</h3>
+              <h3 className="text-2xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(book.title)}</h3>
               <p className="mt-1 text-base text-[#475569]">Savikaina: <b>{book.purchasePrice ? money(book.purchasePrice) : "nežinoma"}</b></p>
             </div>
             <p className="text-base text-[#475569]">Parduota: <b>{soldCount} k.</b></p>
@@ -1049,7 +1139,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
             <article key={sale.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_160px_160px_160px] lg:items-center">
               <div>
                 <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d85f2a]">{sale.platform} / {sale.soldAt}</p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">{book?.title ?? "Knyga"}</h3>
+                <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">{book ? decodeText(book.title) : "Knyga"}</h3>
               </div>
               <p className="text-base text-[#475569]">Kiekis: <b>{sale.quantity}</b></p>
               {editingSaleId === sale.id ? (
@@ -1126,7 +1216,7 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
   const byBook = books.map((book) => {
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
     return {
-      label: book.title,
+      label: decodeText(book.title),
       orders: bookSales.length,
       quantity: bookSales.reduce((sum, sale) => sum + sale.quantity, 0),
       revenue: bookSales.reduce((sum, sale) => sum + sale.salePrice, 0),
@@ -1600,7 +1690,10 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
 }
 
 function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[] }) {
-  const sold = sales.reduce((sum, sale) => sum + sale.quantity, 0) + historicalSales(book);
+  const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const oldSold = historicalSales(book);
+  const sold = enteredSold + oldSold;
+  const title = decodeText(book.title);
   const platformRows = sources.map((source) => {
     const tracked = presence.find((listing) => listing.source === source.key);
     const local = source.key === "wp"
@@ -1622,10 +1715,10 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
     <article className="grid grid-cols-[64px_1fr] gap-4 p-4">
       <img src={book.image} alt="" className="h-20 w-16 rounded-md object-cover" />
       <div>
-        <h3 className="font-semibold">{book.title}</h3>
+        <h3 className="font-semibold">{title}</h3>
         <div className="mt-2 grid gap-1 text-base text-[#475569] sm:grid-cols-4">
           <span>Likutis: <b>{book.stock}</b></span>
-          <span>Parduota: <b>{sold}</b></span>
+          <span>Parduota: <b>{sold}</b>{oldSold ? <em className="not-italic text-[#64748b]"> / WP {oldSold}</em> : null}</span>
           <span>Vieta: <b>{book.storage}</b></span>
           <span>Savikaina: <b>{book.purchasePrice ? money(book.purchasePrice) : "nežinoma"}</b></span>
           <span>Įsigyta: <b>{book.acquiredAt}</b></span>
@@ -1678,7 +1771,7 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch }: { boo
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
         <div className="mt-4 grid gap-3">
-          <select name="bookId" className="field">{books.map((book) => <option key={book.id} value={book.id}>{book.title}</option>)}</select>
+          <select name="bookId" className="field">{books.map((book) => <option key={book.id} value={book.id}>{decodeText(book.title)}</option>)}</select>
           <select name="platform" className="field">{platforms.map((platform) => <option key={platform}>{platform}</option>)}</select>
           <div className="grid grid-cols-2 gap-2">
             <input name="salePrice" type="number" step="0.01" placeholder="Kaina" className="field" required />
