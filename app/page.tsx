@@ -275,6 +275,8 @@ export default function Home() {
   const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
   const [syncingWp, setSyncingWp] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(true);
+  const [filterMessage, setFilterMessage] = useState("");
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
@@ -825,7 +827,7 @@ export default function Home() {
                     </p>
                   )}
                 </div>
-                <details className="xl:col-span-2 rounded-xl border border-[#e87500] bg-white p-3">
+                <details open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)} className="xl:col-span-2 rounded-xl border border-[#e87500] bg-white p-3">
                   <summary className="cursor-pointer text-base font-black text-[#020817]">Filtrai ir rikiavimas</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                     <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field" />
@@ -860,21 +862,35 @@ export default function Home() {
                       <option value="stockAsc">Mažiausias likutis</option>
                       <option value="newest">Naujausiai įsigyta</option>
                     </select>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setQuery("");
-                        setSelectedSource("all");
-                        setStatusFilter("all");
-                        setSalesCountFilter("all");
-                        setSortFilter("title");
-                      }}
-                      className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-base font-semibold text-[#334155]"
-                    >
-                      Išvalyti
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 xl:col-span-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFilterMessage(`Rasta ${filteredBooks.length} knygų.`);
+                          setFiltersOpen(false);
+                        }}
+                        className="h-12 rounded-xl bg-[#e87500] px-4 text-base font-semibold text-white"
+                      >
+                        Ieškoti
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                          setSelectedSource("all");
+                          setStatusFilter("all");
+                          setSalesCountFilter("all");
+                          setSortFilter("title");
+                          setFilterMessage("Filtrai išvalyti.");
+                        }}
+                        className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-base font-semibold text-[#334155]"
+                      >
+                        Išvalyti
+                      </button>
+                    </div>
                   </div>
                 </details>
+                {filterMessage && <p className="xl:col-span-2 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-semibold text-[#166534]">{filterMessage}</p>}
               </div>
               <div className="divide-y divide-[#e2e8f0]">
                 {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
