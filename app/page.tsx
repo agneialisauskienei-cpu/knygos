@@ -311,7 +311,7 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [salesCountFilter, setSalesCountFilter] = useState<SalesCountFilter>("all");
   const [sortFilter, setSortFilter] = useState<SortFilter>("title");
-  const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
+  const [notice, setNotice] = useState("");
   const [syncingWp, setSyncingWp] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -779,21 +779,18 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-white pb-24 text-[#020817] lg:pb-0">
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
-        <div className="flex h-[72px] items-center gap-4 px-5">
+        <div className="flex h-[64px] items-center gap-3 px-4">
           <LogoMark />
           <div className="min-w-0">
             <p className="text-sm font-black uppercase tracking-[0.24em] text-[#e87500]">skaitytaknyga.lt</p>
-            <p className="truncate text-sm font-semibold text-[#475569]">{notice}</p>
+            {notice && <p className="truncate text-sm font-semibold text-[#475569]">{notice}</p>}
           </div>
-          <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm font-semibold text-[#334155] hover:border-[#e87500]">
-            Įjungti pranešimus
-          </button>
         </div>
       </header>
 
-      <div className="grid lg:grid-cols-[260px_1fr]">
+      <div className="grid lg:grid-cols-[220px_1fr]">
         <DashboardSidebar stats={stats} tab={tab} setTab={setTab} />
-        <div className="grid gap-5 px-4 py-4 lg:max-h-[calc(100vh-76px)] lg:overflow-auto lg:px-6">
+        <div className="grid gap-4 px-4 py-4 lg:max-h-[calc(100vh-64px)] lg:overflow-auto lg:px-5">
           {tab === "šiandien" && (
             <section className="grid gap-5 xl:grid-cols-[1fr_0.75fr]">
               <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />
@@ -805,7 +802,7 @@ export default function Home() {
 
           {tab === "kalendorius" && <CalendarScreen calendar={calendar} addCalendarEvent={addCalendarEvent} updateStatus={updateCalendarStatus} updateEvent={updateCalendarEvent} />}
           {tab === "kontaktai" && <ContactsScreen contacts={wantedContacts} addWantedContact={addWantedContact} updateWantedStatus={updateWantedStatus} />}
-          {tab === "pardavimai" && <SalesScreen books={books} sales={sales} updateSalePrice={updateSalePrice} />}
+          {tab === "pardavimai" && <section className="rounded-xl border border-[#e2e8f0] bg-white p-5"><p className="text-base font-semibold text-[#475569]">Pardavimai perkelti prie knygų kortelių.</p><button onClick={() => setTab("knygos")} className="mt-3 rounded-md bg-[#e87500] px-4 py-2 text-base font-semibold text-white">Atidaryti knygas</button></section>}
           {tab === "statistika" && <StatisticsScreen books={books} sales={sales} />}
           {tab === "istorija" && <HistoryScreen books={books} sales={sales} items={items} calendar={calendar} contacts={wantedContacts} sources={trackingSources} />}
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
@@ -843,10 +840,22 @@ export default function Home() {
                     </p>
                   )}
                 </div>
+                <div className="xl:col-span-2 grid gap-2 md:grid-cols-[1fr_auto]">
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFilterMessage(`Rasta ${filteredBooks.length} knygų.`);
+                      setFiltersOpen(false);
+                    }}
+                    className="h-12 rounded-xl bg-[#e87500] px-5 text-base font-semibold text-white"
+                  >
+                    Ieškoti
+                  </button>
+                </div>
                 <details open={filtersOpen} onToggle={(event) => setFiltersOpen(event.currentTarget.open)} className="xl:col-span-2 rounded-xl border border-[#e87500] bg-white p-3">
                   <summary className="cursor-pointer text-base font-black text-[#020817]">Filtrai ir rikiavimas</summary>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-                    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field" />
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                     <select value={selectedSource} onChange={(event) => setSelectedSource(event.target.value as SourceFilter)} className="field">
                       <option value="all">Visos platformos</option>
                       <option value="wp">skaitytaknyga.lt</option>
@@ -878,17 +887,7 @@ export default function Home() {
                       <option value="stockAsc">Mažiausias likutis</option>
                       <option value="newest">Naujausiai įsigyta</option>
                     </select>
-                    <div className="grid grid-cols-2 gap-2 xl:col-span-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFilterMessage(`Rasta ${filteredBooks.length} knygų.`);
-                          setFiltersOpen(false);
-                        }}
-                        className="h-12 rounded-xl bg-[#e87500] px-4 text-base font-semibold text-white"
-                      >
-                        Ieškoti
-                      </button>
+                    <div className="grid gap-2 xl:col-span-1">
                       <button
                         type="button"
                         onClick={() => {
@@ -958,15 +957,13 @@ function Metric({ label, value, danger }: { label: string; value: string | numbe
 
 function LogoMark() {
   return (
-    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-[#e87500] bg-white text-xl font-black text-[#e87500]">
-      SK
-    </div>
+    <img src="/skaityta-knyga-logo.png" alt="Skaityta knyga" className="h-12 w-12 shrink-0 rounded-md object-contain" />
   );
 }
 
 function TabButton({ label, active, onClick, badge }: { label: string; active: boolean; onClick: () => void; badge?: number }) {
   return (
-    <button onClick={onClick} className={`flex h-11 items-center justify-between rounded-xl px-3 text-left text-base font-semibold ${active ? "bg-[#e87500] text-white" : "text-[#475569] hover:bg-[#fff8ef]"}`}>
+    <button onClick={onClick} className={`flex h-9 items-center justify-between rounded-lg px-3 text-left text-sm font-semibold ${active ? "bg-[#e87500] text-white" : "text-[#475569] hover:bg-[#fff8ef]"}`}>
       <span>{label}</span>
       {!!badge && <span className={`rounded-full px-2 py-0.5 text-xs ${active ? "bg-white text-[#e87500]" : "bg-[#fff4e8] text-[#9a3412]"}`}>{badge}</span>}
     </button>
@@ -984,13 +981,12 @@ function MobileNav({ label, active, onClick, badge }: { label: string; active: b
 
 function DashboardSidebar({ stats, tab, setTab }: { stats: { todaySold: number; open: number; husband: number; pickupsToday: number; trackingIssues: number; stock: number; monthRevenue: number; monthProfit: number }; tab: Tab; setTab: (tab: Tab) => void }) {
   return (
-    <aside className="hidden border-b border-[#e2e8f0] bg-white p-4 lg:block lg:h-[calc(100vh-72px)] lg:border-b-0 lg:border-r lg:overflow-auto">
-      <nav className="grid gap-2">
+    <aside className="hidden border-b border-[#e2e8f0] bg-white p-3 lg:block lg:h-[calc(100vh-64px)] lg:border-b-0 lg:border-r lg:overflow-auto">
+      <nav className="grid gap-1.5">
         <TabButton label="Šiandien" active={tab === "šiandien"} onClick={() => setTab("šiandien")} badge={stats.open} />
         <TabButton label="Kalendorius" active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} badge={stats.pickupsToday} />
         <TabButton label="Ieško" active={tab === "kontaktai"} onClick={() => setTab("kontaktai")} />
         <TabButton label="Knygos" active={tab === "knygos"} onClick={() => setTab("knygos")} badge={stats.trackingIssues} />
-        <TabButton label="Pardavimai" active={tab === "pardavimai"} onClick={() => setTab("pardavimai")} />
         <TabButton label="Statistika" active={tab === "statistika"} onClick={() => setTab("statistika")} />
         <TabButton label="Filtrai" active={tab === "filtrai"} onClick={() => setTab("filtrai")} />
         <TabButton label="Istorija" active={tab === "istorija"} onClick={() => setTab("istorija")} />
@@ -998,7 +994,7 @@ function DashboardSidebar({ stats, tab, setTab }: { stats: { todaySold: number; 
         <TabButton label="Įvedimas" active={tab === "ivedimas"} onClick={() => setTab("ivedimas")} />
       </nav>
 
-        <div className="mt-6 grid gap-2 border-t border-[#e2e8f0] pt-5 text-base text-[#475569]">
+        <div className="mt-4 grid gap-1.5 border-t border-[#e2e8f0] pt-4 text-sm text-[#475569]">
           <p><b className="text-[#020817]">{stats.stock}</b> egz. sandėlyje</p>
           <p><b className="text-[#020817]">{stats.open}</b> atviros užduotys</p>
           <p><b className="text-[#020817]">{stats.pickupsToday}</b> paėmimai šiandien</p>
@@ -1850,6 +1846,10 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
   const soldRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0) + historicalRevenue(book);
   const averagePrice = sold ? soldRevenue / sold : 0;
   const title = decodeText(book.title);
+  const visibleSales = [...sales]
+    .sort((a, b) => (hasExactDate(b) ? b.soldAt : "0000").localeCompare(hasExactDate(a) ? a.soldAt : "0000"))
+    .slice(0, 4);
+  const hiddenSales = Math.max(0, sales.length - visibleSales.length);
   const platformRows = sources.map((source) => {
     const tracked = presence.find((listing) => listing.source === source.key);
     const local = source.key === "wp"
@@ -1907,6 +1907,28 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
             );
           })}
         </div>
+        {(visibleSales.length > 0 || oldSold > 0) && (
+          <div className="mt-3 rounded-lg border border-[#e2e8f0] bg-[#f8fafc] p-3">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-[#e87500]">Pardavimai</p>
+              <p className="text-sm text-[#475569]">Išlaidos: <b>{money(sales.reduce((sum, sale) => sum + sale.fees + sale.packing, 0))}</b></p>
+              <p className="text-sm text-[#475569]">Pelnas: <b>{money(sales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0))}</b></p>
+            </div>
+            <div className="mt-2 grid gap-2">
+              {visibleSales.map((sale) => (
+                <div key={sale.id} className="grid gap-1 rounded-md bg-white px-3 py-2 text-sm text-[#475569] sm:grid-cols-[1fr_90px_110px_110px_110px] sm:items-center">
+                  <span className="font-semibold text-[#020817]">{saleSourceLabel(sale)}</span>
+                  <span>{sale.soldAt}</span>
+                  <span>Kiekis: <b>{sale.quantity}</b></span>
+                  <span>Suma: <b>{money(sale.salePrice)}</b></span>
+                  <span>Pelnas: <b>{saleProfit(sale) === undefined ? "nežinomas" : money(saleProfit(sale) ?? 0)}</b></span>
+                </div>
+              ))}
+              {oldSold > 0 && <p className="rounded-md bg-white px-3 py-2 text-sm text-[#475569]">WP istorija: <b>{oldSold}</b> vnt. / {money(historicalRevenue(book))} / datos nėra</p>}
+              {hiddenSales > 0 && <p className="text-sm font-semibold text-[#475569]">Dar {hiddenSales} pard. įrašai sutraukti, kad kortelė neišsitęstų.</p>}
+            </div>
+          </div>
+        )}
       </div>
     </article>
   );
