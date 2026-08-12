@@ -199,6 +199,10 @@ function historicalSales(book: Book) {
   return book.listings.reduce((sum, listing) => sum + listing.sales, 0);
 }
 
+function historicalRevenue(book: Book) {
+  return historicalSales(book) * book.recommendedPrice;
+}
+
 function mergeBooksWithSeed(storedBooks: Book[]) {
   const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
   const seedByTitle = new Map((booksSeed as Book[]).map((book) => [book.title.toLowerCase(), book]));
@@ -1120,7 +1124,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
     const enteredSoldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
     const soldCount = enteredSoldCount + historicalSales(book);
-    const revenue = bookSales.reduce((sum, sale) => sum + sale.salePrice, 0);
+    const revenue = bookSales.reduce((sum, sale) => sum + sale.salePrice, 0) + historicalRevenue(book);
     const avgPrice = soldCount ? revenue / soldCount : 0;
     const firstSale = bookSales.map((sale) => sale.soldAt).sort()[0];
     const avgDaysToSell = firstSale ? daysBetween(book.acquiredAt, firstSale) : undefined;
@@ -1148,7 +1152,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
               <p className="mt-1 text-base text-[#475569]">Savikaina: <b>{book.purchasePrice ? money(book.purchasePrice) : "nežinoma"}</b></p>
             </div>
             <p className="text-base text-[#475569]">Parduota: <b>{soldCount} k.</b></p>
-            <p className="text-base text-[#475569]">Vid. kaina: <b>{money(avgPrice)}</b></p>
+            <p className="text-base text-[#475569]">Suma: <b>{money(revenue)}</b><br />Vid. kaina: <b>{money(avgPrice)}</b></p>
             <p className="text-base text-[#475569]">Pirmas pard.: <b>{avgDaysToSell === undefined ? "neparduota" : `${avgDaysToSell} d.`}</b></p>
           </article>
         ))}
@@ -1214,12 +1218,14 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
 function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
   const totalStock = books.reduce((sum, book) => sum + book.stock, 0);
   const totalCatalogValue = books.reduce((sum, book) => sum + book.stock * book.recommendedPrice, 0);
-  const totalRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
+  const enteredRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
+  const historicalRevenueTotal = books.reduce((sum, book) => sum + historicalRevenue(book), 0);
+  const totalRevenue = enteredRevenue + historicalRevenueTotal;
   const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   const historicalSold = books.reduce((sum, book) => sum + historicalSales(book), 0);
   const totalSold = enteredSold + historicalSold;
   const totalProfit = sales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0);
-  const totalShipments = sales.length;
+  const totalShipments = sales.length + historicalSold;
   const totalShippingCost = sales.reduce((sum, sale) => sum + sale.packing + sale.fees, 0);
   const averageSale = totalSold ? totalRevenue / totalSold : 0;
   const todayKey = "2026-08-12";
@@ -1252,11 +1258,17 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
 
   const byPlatform = platforms.map((platform) => {
     const platformSales = sales.filter((sale) => sale.platform === platform);
+    const platformHistoricalBooks = books
+      .map((book) => ({
+        quantity: book.listings.filter((listing) => listing.platform === platform).reduce((sum, listing) => sum + listing.sales, 0),
+        revenue: book.listings.filter((listing) => listing.platform === platform).reduce((sum, listing) => sum + listing.sales * (listing.price || book.recommendedPrice), 0),
+      }))
+      .filter((row) => row.quantity > 0);
     return {
       label: platform,
-      orders: platformSales.length,
-      quantity: platformSales.reduce((sum, sale) => sum + sale.quantity, 0),
-      revenue: platformSales.reduce((sum, sale) => sum + sale.salePrice, 0),
+      orders: platformSales.length + platformHistoricalBooks.reduce((sum, row) => sum + row.quantity, 0),
+      quantity: platformSales.reduce((sum, sale) => sum + sale.quantity, 0) + platformHistoricalBooks.reduce((sum, row) => sum + row.quantity, 0),
+      revenue: platformSales.reduce((sum, sale) => sum + sale.salePrice, 0) + platformHistoricalBooks.reduce((sum, row) => sum + row.revenue, 0),
       costs: platformSales.reduce((sum, sale) => sum + sale.fees + sale.packing, 0),
       profit: platformSales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0),
     };
@@ -1264,11 +1276,12 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
 
   const byBook = books.map((book) => {
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
+    const oldSold = historicalSales(book);
     return {
       label: decodeText(book.title),
-      orders: bookSales.length,
-      quantity: bookSales.reduce((sum, sale) => sum + sale.quantity, 0),
-      revenue: bookSales.reduce((sum, sale) => sum + sale.salePrice, 0),
+      orders: bookSales.length + oldSold,
+      quantity: bookSales.reduce((sum, sale) => sum + sale.quantity, 0) + oldSold,
+      revenue: bookSales.reduce((sum, sale) => sum + sale.salePrice, 0) + historicalRevenue(book),
       costs: bookSales.reduce((sum, sale) => sum + sale.fees + sale.packing, 0),
       profit: bookSales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0),
     };
@@ -1286,10 +1299,10 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
         <StatCard label="Šiandien vnt." value={todayUnits} detail={`${todaySales.length} siuntų / ${money(todayRevenue)}`} />
         <StatCard label="Šį mėn. vnt." value={currentMonthUnits} detail={`${currentMonth.length} siuntų / ${money(currentMonthRevenue)}`} />
         <StatCard label="Visos siuntos" value={totalShipments} detail={`mokesčiai ir pakavimas ${money(totalShippingCost)}`} />
-        <StatCard label="Pajamos iš viso" value={money(totalRevenue)} detail={`vid. ${money(averageSale)} už vnt.`} />
+        <StatCard label="Pajamos iš viso" value={money(totalRevenue)} detail={`WP istorija ${money(historicalRevenueTotal)}, įvesta ${money(enteredRevenue)}`} />
         <StatCard label="Knygų kataloge" value={books.length} detail={`${totalStock} egz. sandėlyje`} />
         <StatCard label="Katalogo vertė" value={money(totalCatalogValue)} detail="pagal pardavimo kainas" />
-        <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš WP istorijos`} />
+        <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš WP istorijos, vid. ${money(averageSale)}`} />
         <StatCard label="Pelnas" value={money(totalProfit)} detail="kai žinoma savikaina" />
       </div>
 
