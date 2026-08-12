@@ -121,7 +121,7 @@ const salesSeed: Sale[] = [
     id: `agneali1990-${index}-${sale.bookId}`,
     bookId: sale.bookId,
     platform: "Vinted" as Platform,
-    soldAt: "2026-08-12",
+    soldAt: "be datos",
     quantity: 1,
     salePrice: sale.price,
     purchaseCost: 0,
@@ -207,6 +207,10 @@ function saleSourceLabel(sale: Sale) {
 function daysBetween(start: string, end: string) {
   const diff = new Date(end).getTime() - new Date(start).getTime();
   return Math.max(0, Math.round(diff / 86400000));
+}
+
+function hasExactDate(sale: Sale) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(sale.soldAt);
 }
 
 function historicalSales(book: Book) {
@@ -1269,16 +1273,20 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
   const totalShippingCost = sales.reduce((sum, sale) => sum + sale.packing + sale.fees, 0);
   const averageSale = totalSold ? totalRevenue / totalSold : 0;
   const todayKey = "2026-08-12";
-  const todaySales = sales.filter((sale) => sale.soldAt === todayKey);
+  const datedSales = sales.filter(hasExactDate);
+  const undatedSales = sales.filter((sale) => !hasExactDate(sale));
+  const undatedRevenue = undatedSales.reduce((sum, sale) => sum + sale.salePrice, 0);
+  const undatedUnits = undatedSales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const todaySales = datedSales.filter((sale) => sale.soldAt === todayKey);
   const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.salePrice, 0);
   const todayUnits = todaySales.reduce((sum, sale) => sum + sale.quantity, 0);
-  const currentMonth = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
+  const currentMonth = datedSales.filter((sale) => sale.soldAt.startsWith("2026-08"));
   const currentMonthUnits = currentMonth.reduce((sum, sale) => sum + sale.quantity, 0);
   const currentMonthRevenue = currentMonth.reduce((sum, sale) => sum + sale.salePrice, 0);
 
-  function groupSales(keyGetter: (sale: Sale) => string) {
+  function groupSales(keyGetter: (sale: Sale) => string, sourceSales = sales) {
     return Array.from(
-      sales.reduce((map, sale) => {
+      sourceSales.reduce((map, sale) => {
         const key = keyGetter(sale);
         const current = map.get(key) ?? { label: key, orders: 0, quantity: 0, revenue: 0, costs: 0, profit: 0 };
         current.orders += 1;
@@ -1292,9 +1300,9 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
     ).map(([, value]) => value);
   }
 
-  const byDay = groupSales((sale) => sale.soldAt).sort((a, b) => b.label.localeCompare(a.label));
-  const byMonth = groupSales((sale) => sale.soldAt.slice(0, 7)).sort((a, b) => b.label.localeCompare(a.label));
-  const byYear = groupSales((sale) => sale.soldAt.slice(0, 4)).sort((a, b) => b.label.localeCompare(a.label));
+  const byDay = groupSales((sale) => sale.soldAt, datedSales).sort((a, b) => b.label.localeCompare(a.label));
+  const byMonth = groupSales((sale) => sale.soldAt.slice(0, 7), datedSales).sort((a, b) => b.label.localeCompare(a.label));
+  const byYear = groupSales((sale) => sale.soldAt.slice(0, 4), datedSales).sort((a, b) => b.label.localeCompare(a.label));
 
   const byPlatform = platforms.map((platform) => {
     const platformSales = sales.filter((sale) => sale.platform === platform);
@@ -1338,12 +1346,14 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Šiandien vnt." value={todayUnits} detail={`${todaySales.length} siuntų / ${money(todayRevenue)}`} />
         <StatCard label="Šį mėn. vnt." value={currentMonthUnits} detail={`${currentMonth.length} siuntų / ${money(currentMonthRevenue)}`} />
-        <StatCard label="Visos siuntos" value={totalShipments} detail={`mokesčiai ir pakavimas ${money(totalShippingCost)}`} />
+        <StatCard label="Išlaidos" value={money(totalShippingCost)} detail="platformų mokesčiai ir pakavimas" />
+        <StatCard label="Pelnas" value={money(totalProfit)} detail="pagal įvestas išlaidas" />
         <StatCard label="Pajamos iš viso" value={money(totalRevenue)} detail={`WP istorija ${money(historicalRevenueTotal)}, įvesta ${money(enteredRevenue)}`} />
+        <StatCard label="Be datos" value={undatedUnits} detail={`${undatedSales.length} siuntų / ${money(undatedRevenue)} neįeina į dienas`} />
+        <StatCard label="Visos siuntos" value={totalShipments} detail={`${sales.length} įvesta, ${historicalSold} WP istorija`} />
         <StatCard label="Knygų kataloge" value={books.length} detail={`${totalStock} egz. sandėlyje`} />
         <StatCard label="Katalogo vertė" value={money(totalCatalogValue)} detail="pagal pardavimo kainas" />
         <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš WP istorijos, vid. ${money(averageSale)}`} />
-        <StatCard label="Pelnas" value={money(totalProfit)} detail="kai žinoma savikaina" />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -1376,13 +1386,17 @@ function StatsTable({ title, rows, empty }: { title: string; rows: { label: stri
       {rows.length ? (
         <div className="divide-y divide-[#e2e8f0]">
           {rows.map((row) => (
-            <article key={row.label} className="grid gap-2 p-4 sm:grid-cols-[1fr_90px_90px_130px_130px_130px] sm:items-center">
-              <p className="font-semibold text-[#020817]">{row.label}</p>
-              <p className="text-base text-[#475569]">Siuntos: <b>{row.orders}</b></p>
-              <p className="text-base text-[#475569]">Vnt.: <b>{row.quantity}</b></p>
-              <p className="text-base text-[#475569]">Pajamos: <b>{money(row.revenue)}</b></p>
-              <p className="text-base text-[#475569]">Išlaidos: <b>{money(row.costs)}</b></p>
-              <p className="text-base text-[#475569]">Pelnas: <b>{money(row.profit)}</b></p>
+            <article key={row.label} className="grid gap-3 p-4">
+              <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+                <p className="min-w-24 text-lg font-black text-[#020817]">{row.label}</p>
+                <p className="text-base text-[#475569]">Siuntos: <b>{row.orders}</b></p>
+                <p className="text-base text-[#475569]">Vnt.: <b>{row.quantity}</b></p>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <p className="rounded-lg bg-[#f8fafc] px-3 py-2 text-base text-[#475569]">Pajamos<br /><b className="text-[#020817]">{money(row.revenue)}</b></p>
+                <p className="rounded-lg bg-[#fff7ed] px-3 py-2 text-base text-[#475569]">Išlaidos<br /><b className="text-[#9a3412]">{money(row.costs)}</b></p>
+                <p className="rounded-lg bg-[#f0fdf4] px-3 py-2 text-base text-[#475569]">Pelnas<br /><b className="text-[#166534]">{money(row.profit)}</b></p>
+              </div>
             </article>
           ))}
         </div>
