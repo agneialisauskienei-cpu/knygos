@@ -244,6 +244,11 @@ function saleSourceLabel(sale: Sale) {
   return sale.platform;
 }
 
+function platformLabel(platform: Platform) {
+  if (platform === "WooCommerce") return "WP";
+  return platform;
+}
+
 function daysBetween(start: string, end: string) {
   const diff = new Date(end).getTime() - new Date(start).getTime();
   return Math.max(0, Math.round(diff / 86400000));
@@ -1280,11 +1285,35 @@ function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
         <StatCard label="Pelnas" value={money(totalProfit)} detail="pagal įvestas išlaidas" />
         <StatCard label="Pajamos iš viso" value={money(totalRevenue)} detail={`WP istorija ${money(historicalRevenueTotal)}, įvesta ${money(enteredRevenue)}`} />
         <StatCard label="Be datos" value={undatedUnits} detail={`${undatedSales.length} siuntų / ${money(undatedRevenue)} neįeina į dienas`} />
-        <StatCard label="Visos siuntos" value={totalShipments} detail={`${sales.length} įvesta, ${historicalSold} WP istorija`} />
+        <StatCard label="Visos siuntos" value={totalShipments} detail={`${sales.length} įvesta, ${historicalSold} istorija`} />
         <StatCard label="Knygų kataloge" value={books.length} detail={`${totalStock} egz. sandėlyje`} />
         <StatCard label="Katalogo vertė" value={money(totalCatalogValue)} detail="pagal pardavimo kainas" />
-        <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš WP istorijos, vid. ${money(averageSale)}`} />
+        <StatCard label="Parduota egz." value={totalSold} detail={`${enteredSold} įvesta, ${historicalSold} iš istorijos, vid. ${money(averageSale)}`} />
       </div>
+
+      <section className="rounded-xl border border-[#e2e8f0] bg-white p-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.24em] text-[#e87500]">Kanalai</p>
+            <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">Per kur parduota</h3>
+          </div>
+          <p className="text-sm text-[#475569]">Įvesti pardavimai ir katalogo pardavimų istorija kartu.</p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {byPlatform.map((row) => (
+            <article key={row.label} className="rounded-lg border border-[#e2e8f0] p-4">
+              <p className="text-lg font-black text-[#020817]">{platformLabel(row.label as Platform)}</p>
+              <p className="mt-2 text-3xl font-black tracking-[-0.04em] text-[#020817]">{row.quantity}</p>
+              <p className="text-sm font-semibold text-[#475569]">{row.orders} siuntų</p>
+              <div className="mt-3 grid gap-1 text-sm text-[#475569]">
+                <span>Pajamos: <b>{money(row.revenue)}</b></span>
+                <span>Išlaidos: <b>{money(row.costs)}</b></span>
+                <span>Pelnas: <b>{money(row.profit)}</b></span>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-2">
         <StatsTable title="Dienomis" rows={byDay} empty="Dienos pardavimų dar nėra." />
