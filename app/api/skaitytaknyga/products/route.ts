@@ -10,6 +10,8 @@ type StoreProduct = {
     currency_minor_unit?: number;
   };
   stock_status?: string;
+  is_in_stock?: boolean;
+  low_stock_remaining?: number | null;
 };
 
 export const dynamic = "force-dynamic";
@@ -53,6 +55,12 @@ export async function GET() {
       url: product.permalink ?? "",
       image: product.images?.[0]?.src ?? "",
       stockStatus: product.stock_status ?? "instock",
+      stockQuantity:
+        product.stock_status === "outofstock" || product.is_in_stock === false
+          ? 0
+          : typeof product.low_stock_remaining === "number"
+            ? product.low_stock_remaining
+            : undefined,
     })),
   });
 }

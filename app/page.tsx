@@ -110,6 +110,7 @@ type WpProduct = {
   url: string;
   image: string;
   stockStatus: string;
+  stockQuantity?: number;
 };
 
 type MarketplaceProduct = {
@@ -355,6 +356,12 @@ function effectiveStock(book: Book) {
   const wpListing = book.listings.find((listing) => listing.platform === "WooCommerce");
   if (wpListing?.status === "parduota") return 0;
   return book.stock;
+}
+
+function wpProductStock(product: WpProduct, fallback = 1) {
+  if (product.stockStatus === "outofstock") return 0;
+  if (typeof product.stockQuantity === "number") return Math.max(0, product.stockQuantity);
+  return fallback;
 }
 
 function mergeBooksWithSeed(storedBooks: Book[]) {
@@ -1005,7 +1012,7 @@ export default function Home() {
             id: `wp-${product.id}`,
             title: product.title,
             image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
-            stock: product.stockStatus === "outofstock" ? 0 : 1,
+            stock: wpProductStock(product),
             storage: "skaitytaknyga.lt",
             acquiredAt: new Date().toISOString().slice(0, 10),
             purchasePrice: undefined,
@@ -1025,7 +1032,7 @@ export default function Home() {
           book = {
             ...book,
             image: book.image || product.image,
-            stock: product.stockStatus === "outofstock" ? 0 : Math.max(1, book.stock),
+            stock: wpProductStock(product, book.stock),
             recommendedPrice: product.price || book.recommendedPrice,
             listings: hasWooListing
               ? book.listings.map((listing) =>
