@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { booksSeed } from "./books-data";
-import { senaSales, senaUnmatchedSales } from "./sena-sales";
-import { agneali1990UnmatchedSales, agneali1990VintedSales } from "./vinted-agneali1990-sales";
+import { senaSales } from "./sena-sales";
+import { agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 const PRESENCE_STORAGE_KEY = "knygu-apskaita-listings-v1";
@@ -14,7 +14,7 @@ type SourceFilter = SourceKey | "all";
 type StatusFilter = "all" | "aktyvu" | "parduota" | "neįkelta" | "reikia patikrinti" | "juodraščiai";
 type SalesCountFilter = "all" | "0" | "1" | "2-4" | "5+";
 type SortFilter = "title" | "priceDesc" | "priceAsc" | "soldDesc" | "stockAsc" | "newest";
-type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas" | "filtrai";
+type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "statistika" | "istorija" | "pranešimai" | "ivedimas" | "filtrai";
 type Assignee = "Agne" | "Almantas" | "Abu";
 
 type Book = {
@@ -311,7 +311,6 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [salesCountFilter, setSalesCountFilter] = useState<SalesCountFilter>("all");
   const [sortFilter, setSortFilter] = useState<SortFilter>("title");
-  const [notice, setNotice] = useState("");
   const [syncingWp, setSyncingWp] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -448,22 +447,6 @@ export default function Home() {
     setTab("kalendorius");
   }
 
-  async function enableNotifications() {
-    if (!("Notification" in window)) {
-      setNotice("Ši naršyklė nepalaiko telefono pranešimų");
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      new Notification("Skaitytaknyga.lt", {
-        body: "Pranešimai įjungti. Pvz.: parduota knyga arba nauja WP supirkimo užklausa.",
-      });
-      setNotice("Pranešimai įjungti šiame įrenginyje");
-    } else {
-      setNotice("Pranešimai neįjungti, leidimo negauta");
-    }
-  }
-
   function addSale(formData: FormData) {
     const bookId = String(formData.get("bookId"));
     const soldBook = books.find((book) => book.id === bookId);
@@ -570,7 +553,6 @@ export default function Home() {
     let syncOk = false;
 
     setSyncingWp(true);
-    setNotice("Atnaujinama iš skaitytaknyga.lt ir Sena.lt...");
     setSyncMessage("Vyksta atnaujinimas, tikrinama skaitytaknyga.lt ir Sena.lt...");
 
     try {
@@ -682,12 +664,10 @@ export default function Home() {
       setBooksState(updatedBooks);
       persistBooks(updatedBooks);
       const successMessage = `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
-      setNotice(successMessage);
       setSyncMessage(successMessage);
       syncOk = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nežinoma klaida";
-      setNotice(`WP atnaujinti nepavyko: ${message}`);
       setSyncMessage(`Nepavyko atnaujinti: ${message}`);
       setItems((current) => [
         {
@@ -781,10 +761,7 @@ export default function Home() {
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
         <div className="flex h-[64px] items-center gap-3 px-4">
           <LogoMark />
-          <div className="min-w-0">
-            <p className="text-sm font-black uppercase tracking-[0.24em] text-[#e87500]">skaitytaknyga.lt</p>
-            {notice && <p className="truncate text-sm font-semibold text-[#475569]">{notice}</p>}
-          </div>
+          <p className="min-w-0 text-sm font-black uppercase tracking-[0.24em] text-[#e87500]">skaitytaknyga.lt</p>
         </div>
       </header>
 
@@ -802,7 +779,6 @@ export default function Home() {
 
           {tab === "kalendorius" && <CalendarScreen calendar={calendar} addCalendarEvent={addCalendarEvent} updateStatus={updateCalendarStatus} updateEvent={updateCalendarEvent} />}
           {tab === "kontaktai" && <ContactsScreen contacts={wantedContacts} addWantedContact={addWantedContact} updateWantedStatus={updateWantedStatus} />}
-          {tab === "pardavimai" && <section className="rounded-xl border border-[#e2e8f0] bg-white p-5"><p className="text-base font-semibold text-[#475569]">Pardavimai perkelti prie knygų kortelių.</p><button onClick={() => setTab("knygos")} className="mt-3 rounded-md bg-[#e87500] px-4 py-2 text-base font-semibold text-white">Atidaryti knygas</button></section>}
           {tab === "statistika" && <StatisticsScreen books={books} sales={sales} />}
           {tab === "istorija" && <HistoryScreen books={books} sales={sales} items={items} calendar={calendar} contacts={wantedContacts} sources={trackingSources} />}
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
@@ -1168,127 +1144,6 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
           ))}
         </div>
       </section>
-    </section>
-  );
-}
-
-function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: Sale[]; updateSalePrice: (id: string, salePrice: number) => void }) {
-  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
-  const unmatchedTotal = agneali1990UnmatchedSales.reduce((sum, sale) => sum + sale.price, 0);
-  const senaUnmatchedTotal = senaUnmatchedSales.reduce((sum, sale) => sum + sale.price, 0);
-  const bookStats = books.map((book) => {
-    const bookSales = sales.filter((sale) => sale.bookId === book.id);
-    const enteredSoldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
-    const soldCount = enteredSoldCount + historicalSales(book);
-    const revenue = bookSales.reduce((sum, sale) => sum + sale.salePrice, 0) + historicalRevenue(book);
-    const avgPrice = soldCount ? revenue / soldCount : 0;
-    const firstSale = bookSales.map((sale) => sale.soldAt).sort()[0];
-    const avgDaysToSell = firstSale ? daysBetween(book.acquiredAt, firstSale) : undefined;
-    return { book, soldCount, revenue, avgPrice, avgDaysToSell };
-  }).filter((row) => row.soldCount > 0);
-
-  function saveSalePrice(formData: FormData) {
-    updateSalePrice(String(formData.get("id")), Number(formData.get("salePrice")));
-    setEditingSaleId(null);
-  }
-
-  return (
-    <section className="grid gap-5">
-    <div className="rounded-xl border border-[#e2e8f0] bg-white">
-      <div className="border-b border-[#e2e8f0] p-5">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">Apskaita</p>
-        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Pardavimų statistika</h2>
-        <p className="mt-2 text-base text-[#475569]">Kiek kartų parduota, vidutinė kaina ir per kiek dienų knyga pajudėjo.</p>
-      </div>
-      <div className="divide-y divide-[#e2e8f0]">
-        {bookStats.map(({ book, soldCount, revenue, avgPrice, avgDaysToSell }) => (
-          <article key={book.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_150px_170px_180px] lg:items-center">
-            <div>
-              <h3 className="text-2xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(book.title)}</h3>
-              <p className="mt-1 text-base text-[#475569]">Savikaina: <b>{book.purchasePrice ? money(book.purchasePrice) : "nežinoma"}</b></p>
-            </div>
-            <p className="text-base text-[#475569]">Parduota: <b>{soldCount} k.</b></p>
-            <p className="text-base text-[#475569]">Suma: <b>{money(revenue)}</b><br />Vid. kaina: <b>{money(avgPrice)}</b></p>
-            <p className="text-base text-[#475569]">Pirmas pard.: <b>{avgDaysToSell === undefined ? (soldCount > 0 ? "data nežinoma" : "neparduota") : `${avgDaysToSell} d.`}</b></p>
-          </article>
-        ))}
-      </div>
-    </div>
-
-    <div className="rounded-xl border border-[#e2e8f0] bg-white">
-      <div className="border-b border-[#e2e8f0] p-5">
-        <h2 className="text-2xl font-black tracking-[-0.03em] text-[#020817]">Pardavimų įrašai</h2>
-        <p className="mt-2 text-base text-[#475569]">Čia galima pataisyti pardavimo kainą, pvz. jei Vinted parduota pigiau.</p>
-      </div>
-      <div className="divide-y divide-[#e2e8f0]">
-        {sales.map((sale) => {
-          const book = books.find((entry) => entry.id === sale.bookId);
-          return (
-            <article key={sale.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_160px_160px_160px] lg:items-center">
-              <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d85f2a]">{saleSourceLabel(sale)} / {sale.soldAt}</p>
-                <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">{book ? decodeText(book.title) : "Knyga"}</h3>
-              </div>
-              <p className="text-base text-[#475569]">Kiekis: <b>{sale.quantity}</b></p>
-              {editingSaleId === sale.id ? (
-                <form action={saveSalePrice} className="flex gap-2">
-                  <input type="hidden" name="id" value={sale.id} />
-                  <input name="salePrice" type="number" step="0.01" defaultValue={sale.salePrice} className="field max-w-32" />
-                  <button className="rounded-md bg-[#e87500] px-3 text-sm font-semibold text-white">OK</button>
-                </form>
-              ) : (
-                <p className="text-base text-[#475569]">Suma: <b>{money(sale.salePrice)}</b></p>
-              )}
-              <p className="text-base text-[#475569]">Pelnas: <b>{saleProfit(sale) === undefined ? "nežinomas" : money(saleProfit(sale) ?? 0)}</b></p>
-              {editingSaleId !== sale.id && <button onClick={() => setEditingSaleId(sale.id)} className="rounded-md border border-[#e87500] px-3 py-2 text-sm font-semibold text-[#d96500] lg:col-start-4">Keisti kainą</button>}
-            </article>
-          );
-        })}
-      </div>
-    </div>
-
-    <div className="rounded-xl border border-[#e87500] bg-white">
-      <div className="border-b border-[#e2e8f0] p-5">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">agneali1990</p>
-        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Nesuvesti Vinted pardavimai</h2>
-        <p className="mt-2 text-base text-[#475569]">
-          {agneali1990UnmatchedSales.length} įrašai, {money(unmatchedTotal)}. Rinkinių ir netikslių pavadinimų nepririšau prie knygų.
-        </p>
-      </div>
-      <div className="max-h-[520px] overflow-auto divide-y divide-[#e2e8f0]">
-        {agneali1990UnmatchedSales.map((sale, index) => (
-          <article key={`${sale.title}-${index}`} className="grid gap-2 p-4 md:grid-cols-[1fr_150px_190px] md:items-center">
-            <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(sale.title)}</h3>
-            <p className="text-base text-[#475569]">Kaina: <b>{money(sale.price)}</b></p>
-            <p className="w-fit rounded-full bg-[#fff3df] px-3 py-1 text-sm font-bold text-[#8a3b00]">
-              {sale.reason === "rinkinys" ? "Rinkinys" : sale.reason === "dublikatas kataloge" ? `Keli sutapimai (${sale.matches})` : "Nerasta kataloge"}
-            </p>
-          </article>
-        ))}
-      </div>
-    </div>
-
-    <div className="rounded-xl border border-[#e87500] bg-white">
-      <div className="border-b border-[#e2e8f0] p-5">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">Sena.lt</p>
-        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Nesuvesti Sena.lt pardavimai</h2>
-        <p className="mt-2 text-base text-[#475569]">
-          {senaUnmatchedSales.length} įrašai, {money(senaUnmatchedTotal)}. Nepririšau, jei pavadinimas nesutapo tiksliai arba kataloge buvo keli variantai.
-        </p>
-      </div>
-      <div className="max-h-[520px] overflow-auto divide-y divide-[#e2e8f0]">
-        {senaUnmatchedSales.map((sale) => (
-          <article key={sale.orderId} className="grid gap-2 p-4 md:grid-cols-[1fr_130px_130px_190px] md:items-center">
-            <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(sale.title)}</h3>
-            <p className="text-base text-[#475569]">Data: <b>{sale.soldAt}</b></p>
-            <p className="text-base text-[#475569]">Suma: <b>{money(sale.price)}</b></p>
-            <p className="w-fit rounded-full bg-[#fff3df] px-3 py-1 text-sm font-bold text-[#8a3b00]">
-              {sale.reason === "rinkinys" ? "Rinkinys" : sale.reason === "dublikatas kataloge" ? `Keli sutapimai (${sale.matches})` : "Nerasta kataloge"}
-            </p>
-          </article>
-        ))}
-      </div>
-    </div>
     </section>
   );
 }
