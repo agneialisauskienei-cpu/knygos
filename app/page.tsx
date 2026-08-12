@@ -669,9 +669,10 @@ export default function Home() {
 
       const senaResponse = await fetch("/api/sena/products", { cache: "no-store" });
       if (!senaResponse.ok) throw new Error(`Nepavyko pasiekti Sena.lt (${senaResponse.status})`);
-      const senaData = await senaResponse.json() as { total: number; products: MarketplaceProduct[] };
+      const senaData = await senaResponse.json() as { total: number; products: MarketplaceProduct[]; warnings?: string[] };
       if (!Array.isArray(senaData.products)) throw new Error("Sena.lt grąžino netinkamą produktų formatą");
       senaFound = senaData.total || senaData.products.length;
+      const senaWarning = senaData.warnings?.[0];
 
       const booksAfterWp = nextBooks;
       const booksByTitle = new Map(booksAfterWp.map((book) => [titleKey(book.title), book]));
@@ -702,7 +703,9 @@ export default function Home() {
 
       setBooksState(updatedBooks);
       persistBooks(updatedBooks);
-      const successMessage = `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
+      const successMessage = senaWarning
+        ? `WP atnaujinta. Sena.lt laikinai nepilnai pasiekiama: ${senaWarning}. Rasta ${senaFound}, susieta ${senaPresence.length}.`
+        : `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
       setSyncMessage(successMessage);
       syncOk = true;
     } catch (error) {

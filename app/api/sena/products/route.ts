@@ -85,19 +85,29 @@ async function enrichProduct(product: SenaProduct) {
 
 export async function GET() {
   const products: SenaProduct[] = [];
+  const warnings: string[] = [];
 
   for (let page = 1; page <= 8; page += 1) {
     const url = `https://www.sena.lt/vartotojas/skaitytaknygalt${page === 1 ? "" : `?page=${page}`}`;
-    const response = await fetch(url, {
-      headers: {
-        accept: "text/html",
-        "user-agent": "KnyguApskaita/1.0",
-      },
-      next: { revalidate: 300 },
-    });
+    let response: Response;
+
+    try {
+      response = await fetch(url, {
+        headers: {
+          accept: "text/html",
+          "accept-language": "lt-LT,lt;q=0.9,en;q=0.8",
+          "user-agent": "Mozilla/5.0 (compatible; KnyguApskaita/1.0; +https://skaitytaknyga.lt)",
+        },
+        next: { revalidate: 300 },
+      });
+    } catch {
+      warnings.push(`Sena.lt ${page} puslapio pasiekti nepavyko`);
+      break;
+    }
 
     if (!response.ok) {
-      return NextResponse.json({ error: "Sena.lt paskyros pasiekti nepavyko" }, { status: 502 });
+      warnings.push(`Sena.lt ${page} puslapis grąžino ${response.status}`);
+      break;
     }
 
     const html = await response.text();
@@ -108,5 +118,5 @@ export async function GET() {
 
   const unique = Array.from(new Map(products.map((product) => [product.id, product])).values());
   const enriched = await Promise.all(unique.map(enrichProduct));
-  return NextResponse.json({ total: enriched.length, products: enriched });
+  return NextResponse.json({ total: enriched.length, products: enriched, warnings });
 }
