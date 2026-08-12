@@ -6,6 +6,7 @@ import { senaSales, senaUnmatchedSales } from "./sena-sales";
 import { agneali1990UnmatchedSales, agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
+const PRESENCE_STORAGE_KEY = "knygu-apskaita-listings-v1";
 
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
@@ -259,6 +260,31 @@ function persistBooks(books: Book[]) {
   }
 }
 
+function loadListingPresence() {
+  if (typeof window === "undefined") return listingPresenceSeed;
+  try {
+    const saved = window.localStorage.getItem(PRESENCE_STORAGE_KEY);
+    return saved ? JSON.parse(saved) as ListingPresence[] : listingPresenceSeed;
+  } catch {
+    return listingPresenceSeed;
+  }
+}
+
+function persistListingPresence(presence: ListingPresence[]) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(PRESENCE_STORAGE_KEY, JSON.stringify(presence));
+  }
+}
+
+function hasActiveListing(book: Book, source: SourceKey, presence: ListingPresence[]) {
+  const tracked = presence.find((listing) => listing.bookId === book.id && listing.source === source && listing.status !== "neįkelta");
+  if (tracked) return true;
+  if (source === "wp") return book.listings.some((listing) => listing.platform === "WooCommerce" && listing.status !== "neįkelta");
+  if (source === "sena") return book.listings.some((listing) => listing.platform === "Sena.lt" && listing.status !== "neįkelta");
+  if (source.startsWith("vinted")) return book.listings.some((listing) => listing.platform === "Vinted" && listing.status !== "neįkelta");
+  return false;
+}
+
 export default function Home() {
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooksState] = useState<Book[]>(loadBooks);
@@ -266,7 +292,7 @@ export default function Home() {
   const [items, setItems] = useState(workSeed);
   const [calendar, setCalendar] = useState(calendarSeed);
   const [trackingSources, setTrackingSources] = useState(trackingSeed);
-  const [listingPresence, setListingPresence] = useState(listingPresenceSeed);
+  const [listingPresence, setListingPresence] = useState<ListingPresence[]>(loadListingPresence);
   const [wantedContacts, setWantedContacts] = useState(wantedContactsSeed);
   const [query, setQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
@@ -299,10 +325,7 @@ export default function Home() {
     const matchesQuery = title.toLowerCase().includes(query.toLowerCase());
     const matchesSource =
       selectedSource === "all" ||
-      listingPresence.some((listing) => listing.bookId === book.id && listing.source === selectedSource) ||
-      (selectedSource === "wp" && book.listings.some((listing) => listing.platform === "WooCommerce")) ||
-      (selectedSource === "sena" && book.listings.some((listing) => listing.platform === "Sena.lt")) ||
-      (selectedSource.startsWith("vinted") && book.listings.some((listing) => listing.platform === "Vinted"));
+      hasActiveListing(book, selectedSource, listingPresence);
     const statuses = [
       ...book.listings.map((listing) => listing.status.toLowerCase()),
       ...listingPresence.filter((listing) => listing.bookId === book.id).map((listing) => listing.status),
@@ -646,7 +669,6 @@ export default function Home() {
 
       setBooksState(updatedBooks);
       persistBooks(updatedBooks);
-      setSelectedSource("all");
       const successMessage = `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
       setNotice(successMessage);
       setSyncMessage(successMessage);
@@ -696,7 +718,11 @@ export default function Home() {
         },
         ...current,
       ]);
-      setListingPresence((current) => [...wpPresence, ...senaPresence, ...current.filter((listing) => listing.source !== "wp" && listing.source !== "sena")]);
+      setListingPresence((current) => {
+        const nextPresence = [...wpPresence, ...senaPresence, ...current.filter((listing) => listing.source !== "wp" && listing.source !== "sena")];
+        persistListingPresence(nextPresence);
+        return nextPresence;
+      });
     }
   }
 
