@@ -142,11 +142,50 @@ const salesSeed: Sale[] = [
   })),
 ];
 
-const workSeed: WorkItem[] = [];
+const workSeed: WorkItem[] = [
+  {
+    id: "demo-task-1",
+    kind: "buy-request",
+    title: "Paskambinti dėl supirkimo",
+    detail: "Žmogus siūlo 18 knygų, sutarta kaina 30,00 Eur. Reikia suderinti paėmimą.",
+    source: "WordPress forma",
+    due: "šiandien 16:00",
+    assignee: "Almantas",
+    status: "nauja",
+    urgent: true,
+  },
+];
 
-const calendarSeed: CalendarEvent[] = [];
+const calendarSeed: CalendarEvent[] = [
+  {
+    id: "demo-calendar-1",
+    title: "Paėmimas: 18 knygų",
+    date: "2026-08-13",
+    time: "11:30",
+    address: "Vilnius, Žirmūnai",
+    phone: "+370 600 00000",
+    agreedPrice: 30,
+    notes: "Pirma paskambinti ir patikslinti, ar yra detektyvų.",
+    assignee: "Almantas",
+    eventType: "supirkimas",
+    status: "suplanuota",
+  },
+];
 
-const wantedContactsSeed: WantedContact[] = [];
+const wantedContactsSeed: WantedContact[] = [
+  {
+    id: "demo-wanted-1",
+    name: "Tomas Klerskis",
+    contact: "užsakymas 28271",
+    lookingFor: "Magiškieji judesiai",
+    waitingSince: "2026-08-12",
+    channel: "Telefonas",
+    status: "laukia",
+    reminderDate: "",
+    assignee: "Agne",
+    notes: "Pranešti, kai atsiras viena tvarkinga knyga.",
+  },
+];
 
 const trackingSeed: TrackingSource[] = [
   { key: "wp", name: "skaitytaknyga.lt", type: "WooCommerce", account: "WP / WooCommerce", method: "WooCommerce REST API", status: "prijungta", lastChecked: "šiandien 10:42", found: 128, issues: 1 },
@@ -759,15 +798,14 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-white pb-24 text-[#020817] lg:pb-0">
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
-        <div className="flex h-[64px] items-center gap-3 px-4">
+        <div className="flex h-[88px] items-center px-4">
           <LogoMark />
-          <p className="min-w-0 text-sm font-black uppercase tracking-[0.24em] text-[#e87500]">skaitytaknyga.lt</p>
         </div>
       </header>
 
       <div className="grid lg:grid-cols-[220px_1fr]">
         <DashboardSidebar stats={stats} tab={tab} setTab={setTab} />
-        <div className="grid gap-4 px-4 py-4 lg:max-h-[calc(100vh-64px)] lg:overflow-auto lg:px-5">
+        <div className="grid gap-4 px-4 py-4 lg:max-h-[calc(100vh-88px)] lg:overflow-auto lg:px-5">
           {tab === "šiandien" && (
             <section className="grid gap-5 xl:grid-cols-[1fr_0.75fr]">
               <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />
@@ -933,7 +971,7 @@ function Metric({ label, value, danger }: { label: string; value: string | numbe
 
 function LogoMark() {
   return (
-    <img src="/skaityta-knyga-logo.png" alt="Skaityta knyga" className="h-12 w-12 shrink-0 rounded-md object-contain" />
+    <img src="/skaityta-knyga-logo.png" alt="Skaityta knyga" className="h-20 w-20 shrink-0 rounded-md object-contain" />
   );
 }
 
@@ -957,7 +995,7 @@ function MobileNav({ label, active, onClick, badge }: { label: string; active: b
 
 function DashboardSidebar({ stats, tab, setTab }: { stats: { todaySold: number; open: number; husband: number; pickupsToday: number; trackingIssues: number; stock: number; monthRevenue: number; monthProfit: number }; tab: Tab; setTab: (tab: Tab) => void }) {
   return (
-    <aside className="hidden border-b border-[#e2e8f0] bg-white p-3 lg:block lg:h-[calc(100vh-64px)] lg:border-b-0 lg:border-r lg:overflow-auto">
+    <aside className="hidden border-b border-[#e2e8f0] bg-white p-3 lg:block lg:h-[calc(100vh-88px)] lg:border-b-0 lg:border-r lg:overflow-auto">
       <nav className="grid gap-1.5">
         <TabButton label="Šiandien" active={tab === "šiandien"} onClick={() => setTab("šiandien")} badge={stats.open} />
         <TabButton label="Kalendorius" active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} badge={stats.pickupsToday} />
