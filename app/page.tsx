@@ -114,6 +114,7 @@ type WpProduct = {
 type MarketplaceProduct = {
   id: string | number;
   title: string;
+  author?: string;
   price: number;
   url: string;
 };
@@ -454,6 +455,7 @@ function parseMarketplacePaste(rawText: string, source: SourceKey) {
     const title = lines[index];
     const views = lines[index + 1];
     const code = lines[index + 2];
+    const author = lines[index + 3];
     const repeatedTitle = lines[index + 4];
     const price = lines[index + 5];
     if (!/^\d+$/.test(views) || !/^\d+$/.test(code)) continue;
@@ -466,6 +468,7 @@ function parseMarketplacePaste(rawText: string, source: SourceKey) {
     products.push({
       id: `${source}-paste-${code}`,
       title,
+      author,
       price: Number(priceMatch[1].replace(",", ".")),
       url: marketplaceUrl(source),
     });
@@ -495,6 +498,32 @@ function sourcePlatform(source: SourceKey): Platform {
   if (source === "sena") return "Sena.lt";
   if (source.startsWith("vinted")) return "Vinted";
   return "WooCommerce";
+}
+
+function unmatchedBookId(listing: Pick<UnmatchedListing, "source" | "title">) {
+  return `review-${listing.source}-${titleKey(listing.title).replace(/\s+/g, "-")}`;
+}
+
+function isReviewBook(book: Book) {
+  return book.id.startsWith("review-");
+}
+
+function reviewBookFromListing(listing: UnmatchedListing, platform: Platform): Book {
+  const sourceName = sourceDisplayName(listing.source);
+  return {
+    id: unmatchedBookId(listing),
+    title: decodeText(listing.title),
+    image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
+    stock: 0,
+    storage: listing.author ? `Reikia patikrinti · ${sourceName} · ${decodeText(listing.author)}` : `Reikia patikrinti · ${sourceName}`,
+    acquiredAt: new Date().toISOString().slice(0, 10),
+    recommendedPrice: listing.price,
+    listings: [
+      { platform: "WooCommerce", status: "neįkelta", price: 0, sales: 0 },
+      { platform: "Sena.lt", status: platform === "Sena.lt" ? "reikia patikrinti" : "neįkelta", price: platform === "Sena.lt" ? listing.price : 0, sales: 0 },
+      { platform: "Vinted", status: platform === "Vinted" ? "reikia patikrinti" : "neįkelta", price: platform === "Vinted" ? listing.price : 0, sales: 0 },
+    ],
+  };
 }
 
 export default function Home() {
@@ -533,6 +562,7 @@ export default function Home() {
   }, [books, sales, items, calendar, trackingSources, wantedContacts]);
 
   const filteredBooks = books.filter((book) => {
+    if (statusFilter === "reikia patikrinti") return false;
     const title = decodeText(book.title);
     const matchesQuery = title.toLowerCase().includes(query.toLowerCase());
     const matchesSource =
@@ -554,7 +584,7 @@ export default function Home() {
   });
   const filteredUnmatched = unmatchedListings.filter((listing) => {
     if (statusFilter !== "reikia patikrinti") return false;
-    const matchesQuery = decodeText(listing.title).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = `${decodeText(listing.title)} ${decodeText(listing.author ?? "")}`.toLowerCase().includes(query.toLowerCase());
     const matchesSource = selectedSource === "all" || selectedSource === listing.source;
     return matchesQuery && matchesSource;
   });
@@ -758,9 +788,25 @@ export default function Home() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     const presenceRows: ListingPresence[] = [];
     const unmatched: UnmatchedListing[] = [];
+    const catalogBooks = books.filter((book) => !isReviewBook(book));
+    const matchedByBookId = new Map<string, MarketplaceProduct>();
+    const matchedReviewIds = new Set<string>();
+    const unmatchedReviewIds = new Set<string>();
 
-    const updatedBooks = books.map((book) => {
-      const product = products.find((entry) => matchBookByTitle([book], entry.title));
+    for (const product of products) {
+      const matchedBook = matchBookByTitle(catalogBooks, product.title);
+      if (matchedBook) {
+        matchedByBookId.set(matchedBook.id, product);
+        matchedReviewIds.add(unmatchedBookId({ source, title: product.title }));
+      } else {
+        const listing = { ...product, source, importedAt: checkedAt };
+        unmatched.push(listing);
+        unmatchedReviewIds.add(unmatchedBookId(listing));
+      }
+    }
+
+    const updatedExistingBooks = books.filter((book) => !matchedReviewIds.has(book.id) && !unmatchedReviewIds.has(book.id)).map((book) => {
+      const product = matchedByBookId.get(book.id);
       if (!product) return book;
       const hasMarketplaceListing = book.listings.some((listing) => listing.platform === platform);
       presenceRows.push({
@@ -779,9 +825,11 @@ export default function Home() {
       };
     });
 
-    for (const product of products) {
-      if (!matchBookByTitle(books, product.title)) unmatched.push({ ...product, source, importedAt: checkedAt });
-    }
+    const existingIds = new Set(updatedExistingBooks.map((book) => book.id));
+    const reviewBooks = unmatched
+      .map((listing) => reviewBookFromListing(listing, platform))
+      .filter((book) => !existingIds.has(book.id));
+    const updatedBooks = [...reviewBooks, ...updatedExistingBooks];
 
     setBooksState(updatedBooks);
     persistBooks(updatedBooks);
@@ -796,7 +844,7 @@ export default function Home() {
     setUnmatchedListings((current) => {
       const byKey = new Map(current.map((listing) => [`${listing.source}-${titleKey(listing.title)}`, listing]));
       for (const product of products) {
-        if (matchBookByTitle(books, product.title)) byKey.delete(`${source}-${titleKey(product.title)}`);
+        if (matchBookByTitle(catalogBooks, product.title)) byKey.delete(`${source}-${titleKey(product.title)}`);
       }
       for (const listing of unmatched) byKey.set(`${listing.source}-${titleKey(listing.title)}`, listing);
       const next = Array.from(byKey.values());
@@ -825,7 +873,7 @@ export default function Home() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
 
     saveBooks((current) =>
-      current.map((entry) => {
+      current.filter((entry) => entry.id !== unmatchedBookId(listing)).map((entry) => {
         if (entry.id !== bookId) return entry;
         const platform = sourcePlatform(listing.source);
         const hasMarketplaceListing = entry.listings.some((item) => item.platform === platform);
@@ -2001,22 +2049,27 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
 
 function UnmatchedListingRow({ listing, books, attach }: { listing: UnmatchedListing; books: Book[]; attach: (unmatchedId: string | number, bookId: string) => void }) {
   const [bookId, setBookId] = useState("");
-  const suggestions = books
+  const catalogBooks = books.filter((book) => !isReviewBook(book));
+  const sourceName = sourceDisplayName(listing.source);
+  const suggestions = catalogBooks
     .map((book) => ({ book, score: tokenMatchScore(listing.title, book.title) }))
     .filter((entry) => entry.score >= 0.35)
     .sort((a, b) => b.score - a.score)
     .slice(0, 20);
-  const options = suggestions.length ? suggestions.map((entry) => entry.book) : books.slice(0, 80);
+  const options = suggestions.length ? suggestions.map((entry) => entry.book) : catalogBooks.slice(0, 80);
 
   return (
     <article className="grid gap-3 bg-[#fff7ed] p-4">
       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#e87500]">Reikia patikrinti / Sena.lt</p>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#e87500]">Reikia patikrinti / {sourceName}</p>
           <h3 className="mt-1 text-xl font-black tracking-[-0.02em] text-[#020817]">{decodeText(listing.title)}</h3>
-          <p className="mt-1 text-base text-[#475569]">Kaina: <b>{money(listing.price)}</b> · įkelta: {listing.importedAt}</p>
+          <p className="mt-1 text-base text-[#475569]">
+            {listing.author ? <>Autorius: <b>{decodeText(listing.author)}</b> · </> : null}
+            Kaina: <b>{money(listing.price)}</b> · įkelta: {listing.importedAt}
+          </p>
         </div>
-        <a href={listing.url} target="_blank" rel="noreferrer" className="w-fit rounded-md border border-[#e87500] px-3 py-2 text-sm font-semibold text-[#d96500]">Atidaryti Sena.lt</a>
+        <a href={listing.url} target="_blank" rel="noreferrer" className="w-fit rounded-md border border-[#e87500] px-3 py-2 text-sm font-semibold text-[#d96500]">Atidaryti {sourceName}</a>
       </div>
       <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
         <select value={bookId} onChange={(event) => setBookId(event.target.value)} className="field">
