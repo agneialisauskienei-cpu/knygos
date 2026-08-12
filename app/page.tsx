@@ -8,7 +8,7 @@ const APP_PASSWORD = "knygos2026";
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
-type Tab = "šiandien" | "sekimas" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "istorija" | "pranešimai" | "ivedimas";
+type Tab = "šiandien" | "sekimas" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas";
 type Assignee = "Agne" | "Almantas" | "Abu";
 
 type Book = {
@@ -395,6 +395,12 @@ export default function Home() {
     setPasswordError("Slaptažodis neteisingas");
   }
 
+  function logout() {
+    window.sessionStorage.removeItem("knygu-apskaita-auth");
+    setUnlocked(false);
+    setPasswordError("");
+  }
+
   if (!unlocked) {
     return <PasswordScreen error={passwordError} onSubmit={unlockApp} />;
   }
@@ -404,19 +410,26 @@ export default function Home() {
       <header className="sticky top-0 z-20 border-b border-[#e2e8f0] bg-white">
         <div className="flex h-[76px] items-center gap-7 px-5">
           <h1 className="shrink-0 text-xl font-black tracking-[-0.03em] text-[#020817] sm:text-2xl">Knygų prekybos apskaita</h1>
-          <div className="hidden flex-1 items-center gap-3 lg:flex">
+          <div className="hidden flex-1 items-center gap-2 lg:flex">
             <TabButton label="Šiandien" active={tab === "šiandien"} onClick={() => setTab("šiandien")} />
             <TabButton label="Sekimas" active={tab === "sekimas"} onClick={() => setTab("sekimas")} />
             <TabButton label="Kalendorius" active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} />
             <TabButton label="Ieško" active={tab === "kontaktai"} onClick={() => setTab("kontaktai")} />
             <TabButton label="Knygos" active={tab === "knygos"} onClick={() => setTab("knygos")} />
             <TabButton label="Pardavimai" active={tab === "pardavimai"} onClick={() => setTab("pardavimai")} />
-            <TabButton label="Istorija" active={tab === "istorija"} onClick={() => setTab("istorija")} />
-            <TabButton label="Pranešimai" active={tab === "pranešimai"} onClick={() => setTab("pranešimai")} />
-            <TabButton label="Įvedimas" active={tab === "ivedimas"} onClick={() => setTab("ivedimas")} />
+            <TabButton label="Statistika" active={tab === "statistika"} onClick={() => setTab("statistika")} />
+            <select value={["istorija", "pranešimai", "ivedimas"].includes(tab) ? tab : ""} onChange={(event) => event.target.value && setTab(event.target.value as Tab)} className="h-11 rounded-xl border border-[#e2e8f0] bg-white px-3 text-sm font-semibold text-[#475569] outline-none focus:border-[#c65f00]">
+              <option value="">Daugiau</option>
+              <option value="istorija">Istorija</option>
+              <option value="pranešimai">Pranešimai</option>
+              <option value="ivedimas">Įvedimas</option>
+            </select>
           </div>
-          <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-4 py-3 text-base font-semibold text-[#334155] hover:border-[#c65f00]">
+          <button onClick={enableNotifications} className="ml-auto rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm font-semibold text-[#334155] hover:border-[#c65f00]">
             Įjungti pranešimus
+          </button>
+          <button onClick={logout} className="rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm font-semibold text-[#334155] hover:border-[#c65f00]">
+            Atsijungti
           </button>
         </div>
       </header>
@@ -437,6 +450,7 @@ export default function Home() {
           {tab === "kalendorius" && <CalendarScreen calendar={calendar} addCalendarEvent={addCalendarEvent} updateStatus={updateCalendarStatus} updateEvent={updateCalendarEvent} />}
           {tab === "kontaktai" && <ContactsScreen contacts={wantedContacts} addWantedContact={addWantedContact} updateWantedStatus={updateWantedStatus} />}
           {tab === "pardavimai" && <SalesScreen books={books} sales={sales} updateSalePrice={updateSalePrice} />}
+          {tab === "statistika" && <StatisticsScreen books={books} sales={sales} />}
           {tab === "istorija" && <HistoryScreen books={books} sales={sales} items={items} calendar={calendar} contacts={wantedContacts} sources={trackingSources} />}
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
           {tab === "knygos" && (
@@ -464,7 +478,7 @@ export default function Home() {
         <MobileNav label="Sekimas" active={tab === "sekimas"} onClick={() => setTab("sekimas")} badge={stats.trackingIssues} />
         <MobileNav label="Kalend." active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} badge={stats.pickupsToday} />
         <MobileNav label="Ieško" active={tab === "kontaktai"} onClick={() => setTab("kontaktai")} badge={stats.waitingContacts} />
-        <MobileNav label="Knygos" active={tab === "knygos"} onClick={() => setTab("knygos")} />
+        <MobileNav label="Stat." active={tab === "statistika"} onClick={() => setTab("statistika")} />
       </nav>
     </main>
   );
@@ -498,7 +512,7 @@ function Metric({ label, value, danger }: { label: string; value: string | numbe
 }
 
 function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return <button onClick={onClick} className={`rounded-xl px-5 py-3 text-base font-medium ${active ? "bg-[#c65f00] text-white" : "text-[#475569] hover:bg-white"}`}>{label}</button>;
+  return <button onClick={onClick} className={`rounded-xl px-3 py-2 text-sm font-semibold ${active ? "bg-[#c65f00] text-white" : "text-[#475569] hover:bg-white"}`}>{label}</button>;
 }
 
 function MobileNav({ label, active, onClick, badge }: { label: string; active: boolean; onClick: () => void; badge?: number }) {
@@ -539,6 +553,7 @@ function DashboardSidebar({ stats, query, setQuery, setTab, enableNotifications,
 
         <button onClick={() => setTab("sekimas")} className="h-12 rounded-xl bg-[#c65f00] px-4 text-left text-base font-semibold text-white">Atnaujinti platformų sekimą</button>
         <button onClick={() => setTab("kalendorius")} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Planuoti paėmimą</button>
+        <button onClick={() => setTab("statistika")} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Žiūrėti statistiką</button>
         <button onClick={enableNotifications} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Įjungti telefono pranešimus</button>
 
         <div className="grid gap-2 border-t border-[#e2e8f0] pt-5 text-base text-[#475569]">
@@ -804,6 +819,118 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
         })}
       </div>
     </div>
+    </section>
+  );
+}
+
+function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
+  const totalStock = books.reduce((sum, book) => sum + book.stock, 0);
+  const totalCatalogValue = books.reduce((sum, book) => sum + book.stock * book.recommendedPrice, 0);
+  const totalRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
+  const totalSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const totalProfit = sales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0);
+  const averageSale = totalSold ? totalRevenue / totalSold : 0;
+
+  const byMonth = Array.from(
+    sales.reduce((map, sale) => {
+      const key = sale.soldAt.slice(0, 7);
+      const current = map.get(key) ?? { label: key, quantity: 0, revenue: 0, profit: 0 };
+      current.quantity += sale.quantity;
+      current.revenue += sale.salePrice;
+      current.profit += saleProfit(sale) ?? 0;
+      map.set(key, current);
+      return map;
+    }, new Map<string, { label: string; quantity: number; revenue: number; profit: number }>()),
+  ).map(([, value]) => value).sort((a, b) => b.label.localeCompare(a.label));
+
+  const byYear = Array.from(
+    sales.reduce((map, sale) => {
+      const key = sale.soldAt.slice(0, 4);
+      const current = map.get(key) ?? { label: key, quantity: 0, revenue: 0, profit: 0 };
+      current.quantity += sale.quantity;
+      current.revenue += sale.salePrice;
+      current.profit += saleProfit(sale) ?? 0;
+      map.set(key, current);
+      return map;
+    }, new Map<string, { label: string; quantity: number; revenue: number; profit: number }>()),
+  ).map(([, value]) => value).sort((a, b) => b.label.localeCompare(a.label));
+
+  const byPlatform = platforms.map((platform) => {
+    const platformSales = sales.filter((sale) => sale.platform === platform);
+    return {
+      label: platform,
+      quantity: platformSales.reduce((sum, sale) => sum + sale.quantity, 0),
+      revenue: platformSales.reduce((sum, sale) => sum + sale.salePrice, 0),
+      profit: platformSales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0),
+    };
+  }).filter((row) => row.quantity > 0 || row.revenue > 0);
+
+  const byBook = books.map((book) => {
+    const bookSales = sales.filter((sale) => sale.bookId === book.id);
+    return {
+      label: book.title,
+      quantity: bookSales.reduce((sum, sale) => sum + sale.quantity, 0),
+      revenue: bookSales.reduce((sum, sale) => sum + sale.salePrice, 0),
+      profit: bookSales.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0),
+    };
+  }).filter((row) => row.quantity > 0).sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue).slice(0, 20);
+
+  return (
+    <section className="grid gap-5">
+      <div className="rounded-xl border border-[#e2e8f0] bg-white p-5">
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#c65f00]">Statistika</p>
+        <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-[#020817]">Pardavimų ir katalogo pjūviai</h2>
+        <p className="mt-2 text-base text-[#475569]">Sumos, mėnesiai, metai, platformos ir geriausiai judančios knygos.</p>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <StatCard label="Knygų kataloge" value={books.length} detail={`${totalStock} egz. sandėlyje`} />
+        <StatCard label="Katalogo vertė" value={money(totalCatalogValue)} detail="pagal pardavimo kainas" />
+        <StatCard label="Parduota egz." value={totalSold} detail={`${sales.length} įrašai`} />
+        <StatCard label="Pajamos" value={money(totalRevenue)} detail={`vid. ${money(averageSale)}`} />
+        <StatCard label="Pelnas" value={money(totalProfit)} detail="kai žinoma savikaina" />
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <StatsTable title="Mėnesiais" rows={byMonth} empty="Pardavimų dar nėra." />
+        <StatsTable title="Metais" rows={byYear} empty="Metinių duomenų dar nėra." />
+        <StatsTable title="Platformomis" rows={byPlatform} empty="Platformų pardavimų dar nėra." />
+        <StatsTable title="Top knygos" rows={byBook} empty="Kai atsiras pardavimų, čia matysis dažniausiai parduotos knygos." />
+      </div>
+    </section>
+  );
+}
+
+function StatCard({ label, value, detail }: { label: string; value: string | number; detail: string }) {
+  return (
+    <article className="rounded-xl border border-[#e2e8f0] bg-white p-4">
+      <p className="text-sm font-bold text-[#475569]">{label}</p>
+      <p className="mt-2 text-2xl font-black tracking-[-0.03em] text-[#020817]">{value}</p>
+      <p className="mt-1 text-sm text-[#475569]">{detail}</p>
+    </article>
+  );
+}
+
+function StatsTable({ title, rows, empty }: { title: string; rows: { label: string; quantity: number; revenue: number; profit: number }[]; empty: string }) {
+  return (
+    <section className="rounded-xl border border-[#e2e8f0] bg-white">
+      <div className="border-b border-[#e2e8f0] p-4">
+        <h3 className="text-2xl font-black tracking-[-0.03em] text-[#020817]">{title}</h3>
+      </div>
+      {rows.length ? (
+        <div className="divide-y divide-[#e2e8f0]">
+          {rows.map((row) => (
+            <article key={row.label} className="grid gap-2 p-4 sm:grid-cols-[1fr_90px_130px_130px] sm:items-center">
+              <p className="font-semibold text-[#020817]">{row.label}</p>
+              <p className="text-base text-[#475569]">Kiekis: <b>{row.quantity}</b></p>
+              <p className="text-base text-[#475569]">Pajamos: <b>{money(row.revenue)}</b></p>
+              <p className="text-base text-[#475569]">Pelnas: <b>{money(row.profit)}</b></p>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="p-4 text-base text-[#475569]">{empty}</p>
+      )}
     </section>
   );
 }
