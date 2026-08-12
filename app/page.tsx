@@ -7,6 +7,7 @@ import { agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 const PRESENCE_STORAGE_KEY = "knygu-apskaita-listings-v1";
+const UNMATCHED_STORAGE_KEY = "knygu-apskaita-unmatched-v1";
 
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
@@ -115,6 +116,11 @@ type MarketplaceProduct = {
   title: string;
   price: number;
   url: string;
+};
+
+type UnmatchedListing = MarketplaceProduct & {
+  source: SourceKey;
+  importedAt: string;
 };
 
 const salesSeed: Sale[] = [
@@ -336,6 +342,12 @@ function historicalRevenue(book: Book) {
   return historicalSales(book) * book.recommendedPrice;
 }
 
+function effectiveStock(book: Book) {
+  const wpListing = book.listings.find((listing) => listing.platform === "WooCommerce");
+  if (wpListing?.status === "parduota") return 0;
+  return book.stock;
+}
+
 function mergeBooksWithSeed(storedBooks: Book[]) {
   const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
   const seedByTitle = new Map((booksSeed as Book[]).map((book) => [titleKey(book.title), book]));
@@ -398,6 +410,22 @@ function persistListingPresence(presence: ListingPresence[]) {
   }
 }
 
+function loadUnmatchedListings() {
+  if (typeof window === "undefined") return [] as UnmatchedListing[];
+  try {
+    const saved = window.localStorage.getItem(UNMATCHED_STORAGE_KEY);
+    return saved ? JSON.parse(saved) as UnmatchedListing[] : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistUnmatchedListings(listings: UnmatchedListing[]) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(UNMATCHED_STORAGE_KEY, JSON.stringify(listings));
+  }
+}
+
 function hasActiveListing(book: Book, source: SourceKey, presence: ListingPresence[]) {
   const tracked = presence.find((listing) => listing.bookId === book.id && listing.source === source && listing.status !== "neįkelta");
   if (tracked) return true;
@@ -447,6 +475,7 @@ export default function Home() {
   const [calendar, setCalendar] = useState(calendarSeed);
   const [trackingSources, setTrackingSources] = useState(trackingSeed);
   const [listingPresence, setListingPresence] = useState<ListingPresence[]>(loadListingPresence);
+  const [unmatchedListings, setUnmatchedListings] = useState<UnmatchedListing[]>(loadUnmatchedListings);
   const [wantedContacts, setWantedContacts] = useState(wantedContactsSeed);
   const [query, setQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
@@ -461,7 +490,7 @@ export default function Home() {
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
     return {
-      stock: books.reduce((sum, book) => sum + book.stock, 0),
+      stock: books.reduce((sum, book) => sum + effectiveStock(book), 0),
       todaySold: sales.filter((sale) => sale.soldAt === "2026-08-12").reduce((sum, sale) => sum + sale.quantity, 0),
       monthRevenue: month.reduce((sum, sale) => sum + sale.salePrice, 0),
       monthProfit: month.reduce((sum, sale) => sum + (saleProfit(sale) ?? 0), 0),
@@ -493,13 +522,19 @@ export default function Home() {
       (salesCountFilter === "5+" && soldTotal >= 5);
     return matchesQuery && matchesSource && matchesStatus && matchesSales;
   });
+  const filteredUnmatched = unmatchedListings.filter((listing) => {
+    if (statusFilter !== "reikia patikrinti") return false;
+    const matchesQuery = decodeText(listing.title).toLowerCase().includes(query.toLowerCase());
+    const matchesSource = selectedSource === "all" || selectedSource === listing.source;
+    return matchesQuery && matchesSource;
+  });
   const sortedBooks = [...filteredBooks].sort((a, b) => {
     const soldA = historicalSales(a) + sales.filter((sale) => sale.bookId === a.id).reduce((sum, sale) => sum + sale.quantity, 0);
     const soldB = historicalSales(b) + sales.filter((sale) => sale.bookId === b.id).reduce((sum, sale) => sum + sale.quantity, 0);
     if (sortFilter === "priceDesc") return b.recommendedPrice - a.recommendedPrice;
     if (sortFilter === "priceAsc") return a.recommendedPrice - b.recommendedPrice;
     if (sortFilter === "soldDesc") return soldB - soldA;
-    if (sortFilter === "stockAsc") return a.stock - b.stock;
+    if (sortFilter === "stockAsc") return effectiveStock(a) - effectiveStock(b);
     if (sortFilter === "newest") return b.acquiredAt.localeCompare(a.acquiredAt);
     return decodeText(a.title).localeCompare(decodeText(b.title), "lt");
   });
@@ -689,7 +724,7 @@ export default function Home() {
     const products = parseSenaPaste(String(formData.get("senaList") || ""));
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     const presenceRows: ListingPresence[] = [];
-    const unmatched: string[] = [];
+    const unmatched: UnmatchedListing[] = [];
 
     const updatedBooks = books.map((book) => {
       const product = products.find((entry) => matchBookByTitle([book], entry.title));
@@ -712,7 +747,7 @@ export default function Home() {
     });
 
     for (const product of products) {
-      if (!matchBookByTitle(books, product.title)) unmatched.push(product.title);
+      if (!matchBookByTitle(books, product.title)) unmatched.push({ ...product, source: "sena", importedAt: checkedAt });
     }
 
     setBooksState(updatedBooks);
@@ -725,6 +760,13 @@ export default function Home() {
       persistListingPresence(next);
       return next;
     });
+    setUnmatchedListings((current) => {
+      const byKey = new Map(current.map((listing) => [`${listing.source}-${titleKey(listing.title)}`, listing]));
+      for (const listing of unmatched) byKey.set(`${listing.source}-${titleKey(listing.title)}`, listing);
+      const next = Array.from(byKey.values());
+      persistUnmatchedListings(next);
+      return next;
+    });
     setTrackingSources((current) =>
       current.map((source) =>
         source.key === "sena"
@@ -734,10 +776,51 @@ export default function Home() {
     );
     setSyncMessage(
       unmatched.length
-        ? `Sena.lt importuota: susieta ${presenceRows.length}, nepriskirta ${unmatched.length}: ${unmatched.slice(0, 5).join(", ")}${unmatched.length > 5 ? "..." : ""}`
+        ? `Sena.lt importuota: susieta ${presenceRows.length}, reikia patikrinti ${unmatched.length}.`
         : `Sena.lt importuota: susieta ${presenceRows.length} iš ${products.length}.`,
     );
     setTab("knygos");
+  }
+
+  function attachUnmatchedListing(unmatchedId: string | number, bookId: string) {
+    const listing = unmatchedListings.find((entry) => entry.id === unmatchedId);
+    const book = books.find((entry) => entry.id === bookId);
+    if (!listing || !book) return;
+    const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+
+    saveBooks((current) =>
+      current.map((entry) => {
+        if (entry.id !== bookId) return entry;
+        const hasSenaListing = entry.listings.some((item) => item.platform === "Sena.lt");
+        return {
+          ...entry,
+          listings: hasSenaListing
+            ? entry.listings.map((item) => item.platform === "Sena.lt" ? { ...item, status: "aktyvu", price: listing.price } : item)
+            : [...entry.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: listing.price, sales: 0 }],
+        };
+      }),
+    );
+    setListingPresence((current) => {
+      const next = [
+        {
+          bookId,
+          source: listing.source,
+          status: "aktyvu" as const,
+          price: listing.price,
+          url: listing.url,
+          lastSeen: checkedAt,
+        },
+        ...current.filter((item) => !(item.bookId === bookId && item.source === listing.source)),
+      ];
+      persistListingPresence(next);
+      return next;
+    });
+    setUnmatchedListings((current) => {
+      const next = current.filter((entry) => entry.id !== unmatchedId);
+      persistUnmatchedListings(next);
+      return next;
+    });
+    setFilterMessage(`Sujungta: ${decodeText(listing.title)} → ${decodeText(book.title)}.`);
   }
 
   async function runTrackingSync() {
@@ -963,7 +1046,7 @@ export default function Home() {
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų katalogas</h2>
                   <p className="mt-1 text-base text-[#475569]">
-                    Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
+                    Rodoma {visibleBooks.length + filteredUnmatched.length} iš {filteredBooks.length + filteredUnmatched.length} rastų įrašų. Iš viso kataloge: {books.length}.
                   </p>
                 </div>
                 <div className="grid gap-2 justify-self-start xl:justify-self-end">
@@ -1042,6 +1125,9 @@ export default function Home() {
                 {filterMessage && <p className="xl:col-span-2 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-semibold text-[#166534]">{filterMessage}</p>}
               </div>
               <div className="divide-y divide-[#e2e8f0]">
+                {filteredUnmatched.map((listing) => (
+                  <UnmatchedListingRow key={`${listing.source}-${listing.id}`} listing={listing} books={books} attach={attachUnmatchedListing} />
+                ))}
                 {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
               </div>
             </section>
@@ -1307,8 +1393,8 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
 }
 
 function StatisticsScreen({ books, sales }: { books: Book[]; sales: Sale[] }) {
-  const totalStock = books.reduce((sum, book) => sum + book.stock, 0);
-  const totalCatalogValue = books.reduce((sum, book) => sum + book.stock * book.recommendedPrice, 0);
+  const totalStock = books.reduce((sum, book) => sum + effectiveStock(book), 0);
+  const totalCatalogValue = books.reduce((sum, book) => sum + effectiveStock(book) * book.recommendedPrice, 0);
   const enteredRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0);
   const historicalRevenueTotal = books.reduce((sum, book) => sum + historicalRevenue(book), 0);
   const totalRevenue = enteredRevenue + historicalRevenueTotal;
@@ -1876,6 +1962,38 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
   );
 }
 
+function UnmatchedListingRow({ listing, books, attach }: { listing: UnmatchedListing; books: Book[]; attach: (unmatchedId: string | number, bookId: string) => void }) {
+  const [bookId, setBookId] = useState("");
+  const suggestions = books
+    .map((book) => ({ book, score: tokenMatchScore(listing.title, book.title) }))
+    .filter((entry) => entry.score >= 0.35)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+  const options = suggestions.length ? suggestions.map((entry) => entry.book) : books.slice(0, 80);
+
+  return (
+    <article className="grid gap-3 bg-[#fff7ed] p-4">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-[#e87500]">Reikia patikrinti / Sena.lt</p>
+          <h3 className="mt-1 text-xl font-black tracking-[-0.02em] text-[#020817]">{decodeText(listing.title)}</h3>
+          <p className="mt-1 text-base text-[#475569]">Kaina: <b>{money(listing.price)}</b> · įkelta: {listing.importedAt}</p>
+        </div>
+        <a href={listing.url} target="_blank" rel="noreferrer" className="w-fit rounded-md border border-[#e87500] px-3 py-2 text-sm font-semibold text-[#d96500]">Atidaryti Sena.lt</a>
+      </div>
+      <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
+        <select value={bookId} onChange={(event) => setBookId(event.target.value)} className="field">
+          <option value="">Pasirinkti katalogo knygą</option>
+          {options.map((book) => (
+            <option key={book.id} value={book.id}>{decodeText(book.title)}</option>
+          ))}
+        </select>
+        <button type="button" disabled={!bookId} onClick={() => attach(listing.id, bookId)} className="h-12 rounded-xl bg-[#e87500] px-5 text-base font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Sujungti</button>
+      </div>
+    </article>
+  );
+}
+
 function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[] }) {
   const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   const oldSold = historicalSales(book);
@@ -1910,7 +2028,7 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
       <div>
         <h3 className="font-semibold">{title}</h3>
         <div className="mt-2 grid gap-1 text-base text-[#475569] sm:grid-cols-4">
-          <span>Likutis: <b>{book.stock}</b></span>
+          <span>Likutis: <b>{effectiveStock(book)}</b></span>
           <span>Parduota: <b>{sold}</b>{oldSold ? <em className="not-italic text-[#64748b]"> / WP {oldSold}</em> : null}</span>
           <span>Pardavimų suma: <b>{money(soldRevenue)}</b></span>
           <span>Vid. kaina: <b>{sold ? money(averagePrice) : "nėra"}</b></span>
