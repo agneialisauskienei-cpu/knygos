@@ -283,13 +283,21 @@ function titleKey(value: string) {
 function titleTokens(value: string) {
   return titleKey(value)
     .split(" ")
-    .filter((token) => token.length > 1 && !["tomas", "dalis", "knyga"].includes(token));
+    .filter((token) => token.length > 1 && !["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "tomas", "dalis", "knyga", "romanas"].includes(token));
 }
 
 function titleStem(value: string) {
   const tokens = titleTokens(value);
-  const trimmed = tokens.filter((token) => !["tom", "tomu", "tomas", "dalis"].includes(token));
+  const trimmed = tokens.filter((token) => !["tom", "tomu", "tomas", "dalis", "kiek", "patrintas", "krastelis"].includes(token));
   return trimmed.join(" ");
+}
+
+function tokenMatchScore(source: string, target: string) {
+  const sourceTokens = titleTokens(source);
+  const targetTokens = new Set(titleTokens(target));
+  if (!sourceTokens.length) return 0;
+  const matched = sourceTokens.filter((token) => targetTokens.has(token)).length;
+  return matched / sourceTokens.length;
 }
 
 function matchBookByTitle(books: Book[], title: string) {
@@ -311,12 +319,13 @@ function matchBookByTitle(books: Book[], title: string) {
 
   const sourceTokens = titleTokens(title);
   if (sourceTokens.length < 3) return undefined;
-  const tokenMatches = books.filter((book) => {
-    const bookTokens = new Set(titleTokens(book.title));
-    const matched = sourceTokens.filter((token) => bookTokens.has(token)).length;
-    return matched >= Math.min(sourceTokens.length, 4);
-  });
-  return tokenMatches.length === 1 ? tokenMatches[0] : undefined;
+  const tokenMatches = books
+    .map((book) => ({ book, score: tokenMatchScore(title, book.title) }))
+    .filter((match) => match.score >= 0.82)
+    .sort((a, b) => b.score - a.score);
+  if (!tokenMatches.length) return undefined;
+  if (tokenMatches.length === 1 || tokenMatches[0].score > tokenMatches[1].score) return tokenMatches[0].book;
+  return undefined;
 }
 
 function historicalSales(book: Book) {
