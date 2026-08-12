@@ -324,10 +324,10 @@ function matchBookByTitle(books: Book[], title: string) {
   if (partial.length === 1) return partial[0];
 
   const sourceTokens = titleTokens(title);
-  if (sourceTokens.length < 3) return undefined;
+  if (sourceTokens.length < 2) return undefined;
   const tokenMatches = books
     .map((book) => ({ book, score: tokenMatchScore(title, book.title) }))
-    .filter((match) => match.score >= 0.82)
+    .filter((match) => match.score >= (sourceTokens.length === 2 ? 1 : 0.82))
     .sort((a, b) => b.score - a.score);
   if (!tokenMatches.length) return undefined;
   if (tokenMatches.length === 1 || tokenMatches[0].score > tokenMatches[1].score) return tokenMatches[0].book;
@@ -435,7 +435,7 @@ function hasActiveListing(book: Book, source: SourceKey, presence: ListingPresen
   return false;
 }
 
-function parseSenaPaste(rawText: string) {
+function parseMarketplacePaste(rawText: string, source: SourceKey) {
   const lines = decodeText(rawText)
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -457,14 +457,37 @@ function parseSenaPaste(rawText: string) {
     if (seen.has(key)) continue;
     seen.add(key);
     products.push({
-      id: `sena-paste-${code}`,
+      id: `${source}-paste-${code}`,
       title,
       price: Number(priceMatch[1].replace(",", ".")),
-      url: "https://www.sena.lt/vartotojas/skaitytaknygalt",
+      url: marketplaceUrl(source),
     });
   }
 
   return products;
+}
+
+function marketplaceUrl(source: SourceKey) {
+  if (source === "sena") return "https://www.sena.lt/vartotojas/skaitytaknygalt";
+  if (source === "vinted1") return "https://www.vinted.lt/member/agneali1990";
+  if (source === "vinted2") return "https://www.vinted.lt/member/almisali";
+  if (source === "vinted3") return "https://www.vinted.lt/member/wp.vizija";
+  return "";
+}
+
+function sourceDisplayName(source: SourceKey) {
+  if (source === "wp") return "skaitytaknyga.lt";
+  if (source === "sena") return "Sena.lt";
+  if (source === "vinted1") return "agneali1990";
+  if (source === "vinted2") return "almisali";
+  if (source === "vinted3") return "wp.vizija";
+  return source;
+}
+
+function sourcePlatform(source: SourceKey): Platform {
+  if (source === "sena") return "Sena.lt";
+  if (source.startsWith("vinted")) return "Vinted";
+  return "WooCommerce";
 }
 
 export default function Home() {
@@ -720,8 +743,11 @@ export default function Home() {
     setTab("knygos");
   }
 
-  function importSenaPaste(formData: FormData) {
-    const products = parseSenaPaste(String(formData.get("senaList") || ""));
+  function importMarketplacePaste(formData: FormData) {
+    const source = String(formData.get("source") || "sena") as SourceKey;
+    const platform = sourcePlatform(source);
+    const sourceName = sourceDisplayName(source);
+    const products = parseMarketplacePaste(String(formData.get("marketplaceList") || ""), source);
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     const presenceRows: ListingPresence[] = [];
     const unmatched: UnmatchedListing[] = [];
@@ -729,10 +755,10 @@ export default function Home() {
     const updatedBooks = books.map((book) => {
       const product = products.find((entry) => matchBookByTitle([book], entry.title));
       if (!product) return book;
-      const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");
+      const hasMarketplaceListing = book.listings.some((listing) => listing.platform === platform);
       presenceRows.push({
         bookId: book.id,
-        source: "sena",
+        source,
         status: "aktyvu",
         price: product.price,
         url: product.url,
@@ -740,14 +766,14 @@ export default function Home() {
       });
       return {
         ...book,
-        listings: hasSenaListing
-          ? book.listings.map((listing) => listing.platform === "Sena.lt" ? { ...listing, status: "aktyvu", price: product.price } : listing)
-          : [...book.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: product.price, sales: 0 }],
+        listings: hasMarketplaceListing
+          ? book.listings.map((listing) => listing.platform === platform ? { ...listing, status: "aktyvu", price: product.price } : listing)
+          : [...book.listings, { platform, status: "aktyvu", price: product.price, sales: 0 }],
       };
     });
 
     for (const product of products) {
-      if (!matchBookByTitle(books, product.title)) unmatched.push({ ...product, source: "sena", importedAt: checkedAt });
+      if (!matchBookByTitle(books, product.title)) unmatched.push({ ...product, source, importedAt: checkedAt });
     }
 
     setBooksState(updatedBooks);
@@ -755,7 +781,7 @@ export default function Home() {
     setListingPresence((current) => {
       const next = [
         ...presenceRows,
-        ...current.filter((listing) => !(listing.source === "sena" && presenceRows.some((row) => row.bookId === listing.bookId))),
+        ...current.filter((listing) => !(listing.source === source && presenceRows.some((row) => row.bookId === listing.bookId))),
       ];
       persistListingPresence(next);
       return next;
@@ -768,16 +794,16 @@ export default function Home() {
       return next;
     });
     setTrackingSources((current) =>
-      current.map((source) =>
-        source.key === "sena"
-          ? { ...source, status: "prijungta", found: products.length, issues: unmatched.length, lastChecked: checkedAt }
-          : source,
+      current.map((trackingSource) =>
+        trackingSource.key === source
+          ? { ...trackingSource, status: "prijungta", found: products.length, issues: unmatched.length, lastChecked: checkedAt }
+          : trackingSource,
       ),
     );
     setSyncMessage(
       unmatched.length
-        ? `Sena.lt importuota: susieta ${presenceRows.length}, reikia patikrinti ${unmatched.length}.`
-        : `Sena.lt importuota: susieta ${presenceRows.length} iš ${products.length}.`,
+        ? `${sourceName} importuota: susieta ${presenceRows.length}, reikia patikrinti ${unmatched.length}.`
+        : `${sourceName} importuota: susieta ${presenceRows.length} iš ${products.length}.`,
     );
     setTab("knygos");
   }
@@ -791,12 +817,13 @@ export default function Home() {
     saveBooks((current) =>
       current.map((entry) => {
         if (entry.id !== bookId) return entry;
-        const hasSenaListing = entry.listings.some((item) => item.platform === "Sena.lt");
+        const platform = sourcePlatform(listing.source);
+        const hasMarketplaceListing = entry.listings.some((item) => item.platform === platform);
         return {
           ...entry,
-          listings: hasSenaListing
-            ? entry.listings.map((item) => item.platform === "Sena.lt" ? { ...item, status: "aktyvu", price: listing.price } : item)
-            : [...entry.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: listing.price, sales: 0 }],
+          listings: hasMarketplaceListing
+            ? entry.listings.map((item) => item.platform === platform ? { ...item, status: "aktyvu", price: listing.price } : item)
+            : [...entry.listings, { platform, status: "aktyvu", price: listing.price, sales: 0 }],
         };
       }),
     );
@@ -1132,7 +1159,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importSenaPaste={importSenaPaste} />}
+          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importMarketplacePaste={importMarketplacePaste} />}
         </div>
       </div>
 
@@ -2089,7 +2116,7 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
   );
 }
 
-function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importSenaPaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importSenaPaste: (data: FormData) => void }) {
+function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importMarketplacePaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importMarketplacePaste: (data: FormData) => void }) {
   return (
     <section className="grid gap-5 lg:grid-cols-3">
       <form action={importBookBatch} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
@@ -2103,11 +2130,17 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importS
         </div>
         <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti ir paskaičiuoti savikainą</button>
       </form>
-      <form action={importSenaPaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
-        <h2 className="text-2xl font-black tracking-[-0.03em]">Importuoti Sena.lt įkėlimus</h2>
-        <p className="mt-2 text-base text-[#475569]">Įklijuok Sena.lt prekių puslapio tekstą. Programa pažymės rastas knygas kaip aktyvias Sena.lt skelbimuose.</p>
-        <textarea name="senaList" placeholder="Įklijuok Sena.lt prekių sąrašą" className="mt-4 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
-        <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti Sena.lt sąrašą</button>
+      <form action={importMarketplacePaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
+        <h2 className="text-2xl font-black tracking-[-0.03em]">Importuoti įkėlimus</h2>
+        <p className="mt-2 text-base text-[#475569]">Įklijuok Sena.lt arba Vinted paskyros prekių tekstą. Programa pažymės rastas knygas kaip aktyvias pasirinktoje platformoje.</p>
+        <select name="source" defaultValue="sena" className="field mt-4">
+          <option value="sena">Sena.lt</option>
+          <option value="vinted1">agneali1990</option>
+          <option value="vinted2">almisali</option>
+          <option value="vinted3">wp.vizija</option>
+        </select>
+        <textarea name="marketplaceList" placeholder="Įklijuok prekių sąrašą" className="mt-3 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
+        <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti sąrašą</button>
       </form>
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
