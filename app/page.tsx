@@ -9,6 +9,8 @@ const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
+type StatusFilter = "all" | "aktyvu" | "parduota" | "neįkelta" | "reikia patikrinti" | "juodraščiai";
+type SalesCountFilter = "all" | "0" | "1" | "2-4" | "5+";
 type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas" | "filtrai";
 type Assignee = "Agne" | "Almantas" | "Abu";
 
@@ -152,11 +154,33 @@ function historicalSales(book: Book) {
   return book.listings.reduce((sum, listing) => sum + listing.sales, 0);
 }
 
+function mergeBooksWithSeed(storedBooks: Book[]) {
+  const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
+  const seedByTitle = new Map((booksSeed as Book[]).map((book) => [book.title.toLowerCase(), book]));
+  const merged = storedBooks.map((book) => {
+    const seed = seedById.get(book.id) ?? seedByTitle.get(book.title.toLowerCase());
+    if (!seed) return book;
+    return {
+      ...seed,
+      ...book,
+      listings: book.listings.map((listing) => {
+        const seedListing = seed.listings.find((entry) => entry.platform === listing.platform);
+        return seedListing ? { ...seedListing, ...listing, sales: Math.max(seedListing.sales, listing.sales) } : listing;
+      }),
+    };
+  });
+  const existingIds = new Set(merged.map((book) => book.id));
+  return [...merged, ...(booksSeed as Book[]).filter((book) => !existingIds.has(book.id))];
+}
+
 function loadBooks() {
   if (typeof window === "undefined") return booksSeed as Book[];
   try {
     const stored = window.localStorage.getItem(BOOK_STORAGE_KEY);
-    return stored ? JSON.parse(stored) as Book[] : booksSeed as Book[];
+    if (!stored) return booksSeed as Book[];
+    const merged = mergeBooksWithSeed(JSON.parse(stored) as Book[]);
+    persistBooks(merged);
+    return merged;
   } catch {
     return booksSeed as Book[];
   }
@@ -181,6 +205,8 @@ export default function Home() {
   const [wantedContacts, setWantedContacts] = useState(wantedContactsSeed);
   const [query, setQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [salesCountFilter, setSalesCountFilter] = useState<SalesCountFilter>("all");
   const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
   const [syncingWp, setSyncingWp] = useState(false);
 
@@ -204,10 +230,22 @@ export default function Home() {
     const matchesSource =
       selectedSource === "all" ||
       listingPresence.some((listing) => listing.bookId === book.id && listing.source === selectedSource) ||
-      (selectedSource === "wp" && book.listings.some((listing) => listing.platform === "WooCommerce" && listing.status === "aktyvu")) ||
-      (selectedSource === "sena" && book.listings.some((listing) => listing.platform === "Sena.lt" && listing.status === "aktyvu")) ||
-      (selectedSource.startsWith("vinted") && book.listings.some((listing) => listing.platform === "Vinted" && listing.status === "aktyvu"));
-    return matchesQuery && matchesSource;
+      (selectedSource === "wp" && book.listings.some((listing) => listing.platform === "WooCommerce")) ||
+      (selectedSource === "sena" && book.listings.some((listing) => listing.platform === "Sena.lt")) ||
+      (selectedSource.startsWith("vinted") && book.listings.some((listing) => listing.platform === "Vinted"));
+    const statuses = [
+      ...book.listings.map((listing) => listing.status.toLowerCase()),
+      ...listingPresence.filter((listing) => listing.bookId === book.id).map((listing) => listing.status),
+    ];
+    const soldTotal = historicalSales(book) + sales.filter((sale) => sale.bookId === book.id).reduce((sum, sale) => sum + sale.quantity, 0);
+    const matchesStatus = statusFilter === "all" || (statusFilter === "parduota" ? soldTotal > 0 || statuses.includes("parduota") : statuses.includes(statusFilter));
+    const matchesSales =
+      salesCountFilter === "all" ||
+      (salesCountFilter === "0" && soldTotal === 0) ||
+      (salesCountFilter === "1" && soldTotal === 1) ||
+      (salesCountFilter === "2-4" && soldTotal >= 2 && soldTotal <= 4) ||
+      (salesCountFilter === "5+" && soldTotal >= 5);
+    return matchesQuery && matchesSource && matchesStatus && matchesSales;
   });
   const visibleBooks = filteredBooks.slice(0, 120);
 
@@ -631,7 +669,21 @@ export default function Home() {
           {tab === "statistika" && <StatisticsScreen books={books} sales={sales} />}
           {tab === "istorija" && <HistoryScreen books={books} sales={sales} items={items} calendar={calendar} contacts={wantedContacts} sources={trackingSources} />}
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
-          {tab === "filtrai" && <FiltersScreen query={query} setQuery={setQuery} selectedSource={selectedSource} setSelectedSource={setSelectedSource} />}
+          {tab === "filtrai" && (
+            <FiltersScreen
+              query={query}
+              setQuery={setQuery}
+              selectedSource={selectedSource}
+              setSelectedSource={setSelectedSource}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              salesCountFilter={salesCountFilter}
+              setSalesCountFilter={setSalesCountFilter}
+              total={books.length}
+              filtered={filteredBooks.length}
+              setTab={setTab}
+            />
+          )}
           {tab === "knygos" && (
             <section className="rounded-xl border border-[#e2e8f0] bg-white">
               <div className="grid gap-3 border-b border-[#e2e8f0] p-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
@@ -744,11 +796,43 @@ function DashboardSidebar({ stats, tab, setTab }: { stats: { todaySold: number; 
   );
 }
 
-function FiltersScreen({ query, setQuery, selectedSource, setSelectedSource }: { query: string; setQuery: (value: string) => void; selectedSource: SourceFilter; setSelectedSource: (source: SourceFilter) => void }) {
+function FiltersScreen({
+  query,
+  setQuery,
+  selectedSource,
+  setSelectedSource,
+  statusFilter,
+  setStatusFilter,
+  salesCountFilter,
+  setSalesCountFilter,
+  total,
+  filtered,
+  setTab,
+}: {
+  query: string;
+  setQuery: (value: string) => void;
+  selectedSource: SourceFilter;
+  setSelectedSource: (source: SourceFilter) => void;
+  statusFilter: StatusFilter;
+  setStatusFilter: (value: StatusFilter) => void;
+  salesCountFilter: SalesCountFilter;
+  setSalesCountFilter: (value: SalesCountFilter) => void;
+  total: number;
+  filtered: number;
+  setTab: (tab: Tab) => void;
+}) {
+  function clearFilters() {
+    setQuery("");
+    setSelectedSource("all");
+    setStatusFilter("all");
+    setSalesCountFilter("all");
+  }
+
   return (
     <section className="rounded-xl border border-[#e87500] bg-white p-5">
       <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">Filtrai</p>
       <h2 className="mt-3 text-3xl font-black tracking-[-0.04em] text-[#020817]">Paieška ir atranka</h2>
+      <p className="mt-2 text-base text-[#475569]">Rasta {filtered} iš {total} knygų. Filtrai taikomi knygų katalogui.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <label className="grid gap-2">
           <span className="text-sm font-bold text-[#475569]">Paieška</span>
@@ -765,22 +849,33 @@ function FiltersScreen({ query, setQuery, selectedSource, setSelectedSource }: {
             <option value="vinted3">Vinted #3</option>
           </select>
         </label>
-        <FilterSelect label="Būsena" options={["Visos", "Aktyvu", "Parduota", "Neįkelta", "Reikia patikrinti"]} />
-        <FilterSelect label="Atsakingas" options={["Visi", "Agnė", "Almantas", "Abu"]} />
-        <FilterSelect label="Veiksmas" options={["Visi", "Paskambinti", "Paėmimas", "Paslėpti skelbimą", "Papildyti savikainą"]} />
+        <label className="grid gap-2">
+          <span className="text-sm font-bold text-[#475569]">Būsena</span>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as StatusFilter)} className="field">
+            <option value="all">Visos</option>
+            <option value="aktyvu">Aktyvu</option>
+            <option value="parduota">Parduota</option>
+            <option value="neįkelta">Neįkelta</option>
+            <option value="juodraščiai">Juodraščiai</option>
+            <option value="reikia patikrinti">Reikia patikrinti</option>
+          </select>
+        </label>
+        <label className="grid gap-2">
+          <span className="text-sm font-bold text-[#475569]">Pardavimų kiekis</span>
+          <select value={salesCountFilter} onChange={(event) => setSalesCountFilter(event.target.value as SalesCountFilter)} className="field">
+            <option value="all">Visi kiekiai</option>
+            <option value="0">Neparduota</option>
+            <option value="1">Parduota 1 vnt.</option>
+            <option value="2-4">Parduota 2-4 vnt.</option>
+            <option value="5+">Parduota 5+ vnt.</option>
+          </select>
+        </label>
+        <div className="flex items-end gap-3">
+          <button type="button" onClick={() => setTab("knygos")} className="h-12 rounded-xl bg-[#e87500] px-5 text-base font-semibold text-white">Rodyti knygas</button>
+          <button type="button" onClick={clearFilters} className="h-12 rounded-xl border border-[#e2e8f0] px-5 text-base font-semibold text-[#334155]">Išvalyti</button>
+        </div>
       </div>
     </section>
-  );
-}
-
-function FilterSelect({ label, options }: { label: string; options: string[] }) {
-  return (
-    <label className="grid gap-2">
-      <span className="text-sm font-bold text-[#475569]">{label}</span>
-      <select className="h-12 rounded-xl border border-[#e2e8f0] bg-white px-4 text-base outline-none focus:border-[#e87500]">
-        {options.map((option) => <option key={option}>{option}</option>)}
-      </select>
-    </label>
   );
 }
 
