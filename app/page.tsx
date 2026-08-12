@@ -107,6 +107,13 @@ type WpProduct = {
   stockStatus: string;
 };
 
+type MarketplaceProduct = {
+  id: string | number;
+  title: string;
+  price: number;
+  url: string;
+};
+
 const salesSeed: Sale[] = [];
 
 const workSeed: WorkItem[] = [];
@@ -448,12 +455,14 @@ export default function Home() {
   async function runTrackingSync() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
     let wpFound = books.length;
+    let senaFound = 0;
     let wpPresence: ListingPresence[] = [];
+    let senaPresence: ListingPresence[] = [];
     let importedCount = 0;
     let syncOk = false;
 
     setSyncingWp(true);
-    setNotice("Atnaujinama iš skaitytaknyga.lt...");
+    setNotice("Atnaujinama iš skaitytaknyga.lt ir Sena.lt...");
 
     try {
       const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
@@ -527,8 +536,44 @@ export default function Home() {
           };
         })
         .filter(Boolean) as ListingPresence[];
+
+      const senaResponse = await fetch("/api/sena/products", { cache: "no-store" });
+      if (!senaResponse.ok) throw new Error(`Nepavyko pasiekti Sena.lt (${senaResponse.status})`);
+      const senaData = await senaResponse.json() as { total: number; products: MarketplaceProduct[] };
+      if (!Array.isArray(senaData.products)) throw new Error("Sena.lt grąžino netinkamą produktų formatą");
+      senaFound = senaData.total || senaData.products.length;
+
+      const booksAfterWp = nextBooks;
+      const booksByTitle = new Map(booksAfterWp.map((book) => [book.title.toLowerCase(), book]));
+      const updatedBooks = [...booksAfterWp];
+
+      for (const product of senaData.products.filter((entry) => entry.title)) {
+        const book = booksByTitle.get(product.title.toLowerCase());
+        if (!book) continue;
+        const index = updatedBooks.findIndex((entry) => entry.id === book.id);
+        const hasSenaListing = book.listings.some((listing) => listing.platform === "Sena.lt");
+        const nextListings = hasSenaListing
+          ? book.listings.map((listing) =>
+              listing.platform === "Sena.lt"
+                ? { ...listing, status: "aktyvu", price: product.price || listing.price }
+                : listing,
+            )
+          : [...book.listings, { platform: "Sena.lt" as Platform, status: "aktyvu", price: product.price, sales: 0 }];
+        if (index !== -1) updatedBooks[index] = { ...book, listings: nextListings };
+        senaPresence.push({
+          bookId: book.id,
+          source: "sena",
+          status: "aktyvu",
+          price: product.price,
+          url: product.url,
+          lastSeen: checkedAt,
+        });
+      }
+
+      setBooksState(updatedBooks);
+      persistBooks(updatedBooks);
       setSelectedSource("all");
-      setNotice(`WP atnaujinta: rasta ${wpFound}, naujai įrašyta ${importedCount}.`);
+      setNotice(`Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}.`);
       syncOk = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nežinoma klaida";
@@ -555,9 +600,9 @@ export default function Home() {
       setTrackingSources((current) =>
         current.map((source) => ({
           ...source,
-          status: source.key === "wp" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
-          found: source.key === "wp" ? wpFound : source.found,
-          lastChecked: source.key === "wp" ? checkedAt : "ką tik",
+          status: source.key === "wp" || source.key === "sena" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
+          found: source.key === "wp" ? wpFound : source.key === "sena" ? senaFound : source.found,
+          lastChecked: source.key === "wp" || source.key === "sena" ? checkedAt : "ką tik",
         })),
       );
       setItems((current) => [
@@ -565,7 +610,7 @@ export default function Home() {
           id: crypto.randomUUID(),
           kind: "reminder",
           title: "Platformų sekimas atnaujintas",
-          detail: `Patikrinta skaitytaknyga.lt. WP rasta: ${wpFound} skelb., naujai įrašyta: ${importedCount}.`,
+          detail: `Patikrinta skaitytaknyga.lt ir Sena.lt. WP rasta: ${wpFound}, Sena.lt rasta: ${senaFound}, su katalogu susieta: ${senaPresence.length}, naujai įrašyta: ${importedCount}.`,
           source: "Sekimas",
           due: "dabar",
           assignee: "Agne",
@@ -574,7 +619,7 @@ export default function Home() {
         },
         ...current,
       ]);
-      setListingPresence((current) => [...wpPresence, ...current.filter((listing) => listing.source !== "wp")]);
+      setListingPresence((current) => [...wpPresence, ...senaPresence, ...current.filter((listing) => listing.source !== "wp" && listing.source !== "sena")]);
     }
   }
 
@@ -696,7 +741,7 @@ export default function Home() {
                     Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
                   </p>
                 </div>
-                <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti iš WP"}</button>
+                <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP ir Sena.lt"}</button>
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field lg:w-80" />
               </div>
               <div className="divide-y divide-[#e2e8f0]">
