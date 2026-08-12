@@ -580,6 +580,7 @@ export default function Home() {
 
   function addWantedContact(formData: FormData) {
     const assignee = String(formData.get("assignee")) as Assignee;
+    const reminderDate = String(formData.get("reminderDate") || "");
     const contact: WantedContact = {
       id: crypto.randomUUID(),
       name: String(formData.get("name")),
@@ -588,24 +589,26 @@ export default function Home() {
       waitingSince: String(formData.get("waitingSince")),
       channel: String(formData.get("channel")) as WantedContact["channel"],
       status: "laukia",
-      reminderDate: String(formData.get("reminderDate")),
+      reminderDate,
       assignee,
       notes: String(formData.get("notes")),
     };
     setWantedContacts((current) => [contact, ...current]);
-    setItems((current) => [
-      {
-        id: crypto.randomUUID(),
-        kind: "reminder",
-        title: `Ieško knygos: ${contact.name}`,
-        detail: `${contact.lookingFor}. Kontaktas: ${contact.contact}. ${contact.notes}`,
-        source: "Ieško",
-        due: contact.reminderDate,
-        assignee,
-        status: "nauja",
-      },
-      ...current,
-    ]);
+    if (reminderDate) {
+      setItems((current) => [
+        {
+          id: crypto.randomUUID(),
+          kind: "reminder",
+          title: `Ieško knygos: ${contact.name}`,
+          detail: `${contact.lookingFor}. Kontaktas: ${contact.contact}. ${contact.notes}`,
+          source: "Ieško",
+          due: reminderDate,
+          assignee,
+          status: "nauja",
+        },
+        ...current,
+      ]);
+    }
     setTab("kontaktai");
   }
 
@@ -891,7 +894,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
           <textarea name="lookingFor" placeholder="Kokių knygų ieško / laukia" className="min-h-24 rounded-xl border border-[#e2e8f0] bg-white p-3 text-sm outline-none focus:border-[#e87500]" required />
           <div className="grid grid-cols-2 gap-2">
             <input name="waitingSince" type="date" defaultValue="2026-08-12" className="field" required />
-            <input name="reminderDate" type="date" defaultValue="2026-08-15" className="field" required />
+            <input name="reminderDate" type="date" className="field" />
           </div>
           <div className="grid grid-cols-2 gap-2">
             <select name="channel" defaultValue="Telefonas" className="field">
@@ -928,7 +931,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
                   <div className="mt-2 grid gap-1 text-base text-[#475569]">
                     <span>Kontaktas: <b>{contact.contact}</b></span>
                     <span>Laukia nuo: <b>{contact.waitingSince}</b></span>
-                    <span>Priminti: <b>{contact.reminderDate}</b></span>
+                    <span>Priminti: <b>{contact.reminderDate || "nenustatyta"}</b></span>
                     <span>Ieško: <b>{contact.lookingFor}</b></span>
                     <span>Pastabos: {contact.notes || "nėra"}</span>
                   </div>
