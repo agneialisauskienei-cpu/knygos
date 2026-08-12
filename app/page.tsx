@@ -1165,7 +1165,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
             </div>
             <p className="text-base text-[#475569]">Parduota: <b>{soldCount} k.</b></p>
             <p className="text-base text-[#475569]">Suma: <b>{money(revenue)}</b><br />Vid. kaina: <b>{money(avgPrice)}</b></p>
-            <p className="text-base text-[#475569]">Pirmas pard.: <b>{avgDaysToSell === undefined ? "neparduota" : `${avgDaysToSell} d.`}</b></p>
+            <p className="text-base text-[#475569]">Pirmas pard.: <b>{avgDaysToSell === undefined ? (soldCount > 0 ? "data nežinoma" : "neparduota") : `${avgDaysToSell} d.`}</b></p>
           </article>
         ))}
       </div>
@@ -1767,6 +1767,8 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
   const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   const oldSold = historicalSales(book);
   const sold = enteredSold + oldSold;
+  const soldRevenue = sales.reduce((sum, sale) => sum + sale.salePrice, 0) + historicalRevenue(book);
+  const averagePrice = sold ? soldRevenue / sold : 0;
   const title = decodeText(book.title);
   const platformRows = sources.map((source) => {
     const tracked = presence.find((listing) => listing.source === source.key);
@@ -1793,6 +1795,8 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
         <div className="mt-2 grid gap-1 text-base text-[#475569] sm:grid-cols-4">
           <span>Likutis: <b>{book.stock}</b></span>
           <span>Parduota: <b>{sold}</b>{oldSold ? <em className="not-italic text-[#64748b]"> / WP {oldSold}</em> : null}</span>
+          <span>Pardavimų suma: <b>{money(soldRevenue)}</b></span>
+          <span>Vid. kaina: <b>{sold ? money(averagePrice) : "nėra"}</b></span>
           <span>Vieta: <b>{book.storage}</b></span>
           <span>Savikaina: <b>{book.purchasePrice ? money(book.purchasePrice) : "nežinoma"}</b></span>
           <span>Įsigyta: <b>{book.acquiredAt}</b></span>
