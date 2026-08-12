@@ -178,6 +178,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
   const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
+  const [syncingWp, setSyncingWp] = useState(false);
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
@@ -407,62 +408,68 @@ export default function Home() {
     let wpFound = books.length;
     let wpPresence: ListingPresence[] = [];
     let importedCount = 0;
+    let syncOk = false;
+
+    setSyncingWp(true);
+    setNotice("Atnaujinama iš skaitytaknyga.lt...");
 
     try {
       const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
-      if (!response.ok) throw new Error("Nepavyko pasiekti skaitytaknyga.lt");
+      if (!response.ok) throw new Error(`Nepavyko pasiekti skaitytaknyga.lt (${response.status})`);
       const data = await response.json() as { total: number; products: WpProduct[] };
+      if (!Array.isArray(data.products)) throw new Error("WP grąžino netinkamą produktų formatą");
       wpFound = data.total || data.products.length || books.length;
       const syncedBooks = new Map<string, Book>();
+      const byTitle = new Map(books.map((book) => [book.title.toLowerCase(), book]));
+      const nextBooks = [...books];
 
-      saveBooks((current) => {
-        const byTitle = new Map(current.map((book) => [book.title.toLowerCase(), book]));
-        const next = [...current];
-
-        for (const product of data.products) {
-          const key = product.title.toLowerCase();
-          let book = byTitle.get(key);
-          if (!book) {
-            book = {
-              id: `wp-${product.id}`,
-              title: product.title,
-              image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
-              stock: product.stockStatus === "outofstock" ? 0 : 1,
-              storage: "skaitytaknyga.lt",
-              acquiredAt: new Date().toISOString().slice(0, 10),
-              purchasePrice: undefined,
-              recommendedPrice: product.price || 5,
-              listings: [
-                { platform: "WooCommerce", status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price, sales: 0 },
-                { platform: "Vinted", status: "neįkelta", price: 0, sales: 0 },
-                { platform: "Sena.lt", status: "neįkelta", price: 0, sales: 0 },
-              ],
-            };
-            byTitle.set(key, book);
-            next.unshift(book);
-            importedCount += 1;
-          } else {
-            const existingBook = book;
-            book = {
-              ...book,
-              image: book.image || product.image,
-              stock: product.stockStatus === "outofstock" ? 0 : Math.max(1, book.stock),
-              recommendedPrice: product.price || book.recommendedPrice,
-              listings: book.listings.map((listing) =>
-                listing.platform === "WooCommerce"
-                  ? { ...listing, status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price }
-                  : listing,
-              ),
-            };
-            const index = next.findIndex((entry) => entry.id === existingBook.id);
-            if (index !== -1) next[index] = book;
-            byTitle.set(key, book);
-          }
-          syncedBooks.set(key, book);
+      for (const product of data.products.filter((entry) => entry.title)) {
+        const key = product.title.toLowerCase();
+        let book = byTitle.get(key);
+        if (!book) {
+          book = {
+            id: `wp-${product.id}`,
+            title: product.title,
+            image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
+            stock: product.stockStatus === "outofstock" ? 0 : 1,
+            storage: "skaitytaknyga.lt",
+            acquiredAt: new Date().toISOString().slice(0, 10),
+            purchasePrice: undefined,
+            recommendedPrice: product.price || 5,
+            listings: [
+              { platform: "WooCommerce", status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price, sales: 0 },
+              { platform: "Vinted", status: "neįkelta", price: 0, sales: 0 },
+              { platform: "Sena.lt", status: "neįkelta", price: 0, sales: 0 },
+            ],
+          };
+          byTitle.set(key, book);
+          nextBooks.unshift(book);
+          importedCount += 1;
+        } else {
+          const existingBook = book;
+          const hasWooListing = book.listings.some((listing) => listing.platform === "WooCommerce");
+          book = {
+            ...book,
+            image: book.image || product.image,
+            stock: product.stockStatus === "outofstock" ? 0 : Math.max(1, book.stock),
+            recommendedPrice: product.price || book.recommendedPrice,
+            listings: hasWooListing
+              ? book.listings.map((listing) =>
+                  listing.platform === "WooCommerce"
+                    ? { ...listing, status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price }
+                    : listing,
+                )
+              : [{ platform: "WooCommerce", status: product.stockStatus === "outofstock" ? "parduota" : "aktyvu", price: product.price, sales: 0 }, ...book.listings],
+          };
+          const index = nextBooks.findIndex((entry) => entry.id === existingBook.id);
+          if (index !== -1) nextBooks[index] = book;
+          byTitle.set(key, book);
         }
+        syncedBooks.set(key, book);
+      }
 
-        return next;
-      });
+      setBooksState(nextBooks);
+      persistBooks(nextBooks);
 
       wpPresence = data.products
         .map((product) => {
@@ -478,13 +485,18 @@ export default function Home() {
           };
         })
         .filter(Boolean) as ListingPresence[];
-    } catch {
+      setSelectedSource("all");
+      setNotice(`WP atnaujinta: rasta ${wpFound}, naujai įrašyta ${importedCount}.`);
+      syncOk = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Nežinoma klaida";
+      setNotice(`WP atnaujinti nepavyko: ${message}`);
       setItems((current) => [
         {
           id: crypto.randomUUID(),
           kind: "reminder",
           title: "Skaitytaknyga.lt sekimo klaida",
-          detail: "Nepavyko automatiškai nuskaityti viešo WooCommerce katalogo. Gali reikėti read-only WooCommerce API rakto.",
+          detail: `Nepavyko automatiškai nuskaityti viešo WooCommerce katalogo. Klaida: ${message}.`,
           source: "Sekimas",
           due: "dabar",
           assignee: "Agne",
@@ -493,31 +505,35 @@ export default function Home() {
         },
         ...current,
       ]);
+    } finally {
+      setSyncingWp(false);
     }
 
-    setTrackingSources((current) =>
-      current.map((source) => ({
-        ...source,
-        status: source.key === "wp" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
-        found: source.key === "wp" ? wpFound : source.found,
-        lastChecked: source.key === "wp" ? checkedAt : "ką tik",
-      })),
-    );
-    setItems((current) => [
-      {
-        id: crypto.randomUUID(),
-        kind: "reminder",
-        title: "Platformų sekimas atnaujintas",
-        detail: `Patikrinta skaitytaknyga.lt, Sena.lt ir 3 Vinted paskyros. WP rasta: ${wpFound} skelb., naujai įrašyta: ${importedCount}.`,
-        source: "Sekimas",
-        due: "dabar",
-        assignee: "Agne",
-        status: "nauja",
-        urgent: stats.trackingIssues > 0,
-      },
-      ...current,
-    ]);
-    setListingPresence((current) => [...wpPresence, ...current.filter((listing) => listing.source !== "wp")]);
+    if (syncOk) {
+      setTrackingSources((current) =>
+        current.map((source) => ({
+          ...source,
+          status: source.key === "wp" ? "prijungta" : source.status === "klaida" ? "klaida" : "prijungta",
+          found: source.key === "wp" ? wpFound : source.found,
+          lastChecked: source.key === "wp" ? checkedAt : "ką tik",
+        })),
+      );
+      setItems((current) => [
+        {
+          id: crypto.randomUUID(),
+          kind: "reminder",
+          title: "Platformų sekimas atnaujintas",
+          detail: `Patikrinta skaitytaknyga.lt. WP rasta: ${wpFound} skelb., naujai įrašyta: ${importedCount}.`,
+          source: "Sekimas",
+          due: "dabar",
+          assignee: "Agne",
+          status: "nauja",
+          urgent: stats.trackingIssues > 0,
+        },
+        ...current,
+      ]);
+      setListingPresence((current) => [...wpPresence, ...current.filter((listing) => listing.source !== "wp")]);
+    }
   }
 
   function addWantedContact(formData: FormData) {
@@ -621,7 +637,7 @@ export default function Home() {
                     Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
                   </p>
                 </div>
-                <button onClick={runTrackingSync} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white">Atnaujinti iš WP</button>
+                <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti iš WP"}</button>
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field lg:w-80" />
               </div>
               <div className="divide-y divide-[#e2e8f0]">
