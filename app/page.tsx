@@ -9,7 +9,7 @@ const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
 type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
-type Tab = "šiandien" | "sekimas" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas";
+type Tab = "šiandien" | "kalendorius" | "kontaktai" | "knygos" | "pardavimai" | "statistika" | "istorija" | "pranešimai" | "ivedimas";
 type Assignee = "Agne" | "Almantas" | "Abu";
 
 type Book = {
@@ -539,7 +539,6 @@ export default function Home() {
           <h1 className="shrink-0 text-xl font-black tracking-[-0.03em] text-[#020817] sm:text-2xl">Knygų prekybos apskaita</h1>
           <div className="hidden flex-1 items-center gap-2 lg:flex">
             <TabButton label="Šiandien" active={tab === "šiandien"} onClick={() => setTab("šiandien")} />
-            <TabButton label="Sekimas" active={tab === "sekimas"} onClick={() => setTab("sekimas")} />
             <TabButton label="Kalendorius" active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} />
             <TabButton label="Ieško" active={tab === "kontaktai"} onClick={() => setTab("kontaktai")} />
             <TabButton label="Knygos" active={tab === "knygos"} onClick={() => setTab("knygos")} />
@@ -573,7 +572,6 @@ export default function Home() {
           </section>
           )}
 
-          {tab === "sekimas" && <TrackingScreen books={books} sources={trackingSources} presence={listingPresence} selectedSource={selectedSource} runTrackingSync={runTrackingSync} />}
           {tab === "kalendorius" && <CalendarScreen calendar={calendar} addCalendarEvent={addCalendarEvent} updateStatus={updateCalendarStatus} updateEvent={updateCalendarEvent} />}
           {tab === "kontaktai" && <ContactsScreen contacts={wantedContacts} addWantedContact={addWantedContact} updateWantedStatus={updateWantedStatus} />}
           {tab === "pardavimai" && <SalesScreen books={books} sales={sales} updateSalePrice={updateSalePrice} />}
@@ -582,17 +580,18 @@ export default function Home() {
           {tab === "pranešimai" && <NotificationPanel items={items} completeItem={completeItem} assignToHusband={assignToHusband} addWorkItem={addWorkItem} updateWorkItem={updateWorkItem} deleteWorkItem={deleteWorkItem} />}
           {tab === "knygos" && (
             <section className="rounded-xl border border-[#e2e8f0] bg-white">
-              <div className="grid gap-3 border-b border-[#e2e8f0] p-4 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div className="grid gap-3 border-b border-[#e2e8f0] p-4 xl:grid-cols-[1fr_auto_auto] xl:items-center">
                 <div>
                   <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų katalogas</h2>
                   <p className="mt-1 text-base text-[#475569]">
                     Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
                   </p>
                 </div>
+                <button onClick={runTrackingSync} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white">Atnaujinti iš WP</button>
                 <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ieškoti knygos" className="field lg:w-80" />
               </div>
               <div className="divide-y divide-[#e2e8f0]">
-                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} />)}
+                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
               </div>
             </section>
           )}
@@ -602,7 +601,7 @@ export default function Home() {
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-[#e2e8f0] bg-white p-2 shadow-[0_-8px_30px_rgba(15,23,42,0.12)] lg:hidden">
         <MobileNav label="Šiandien" active={tab === "šiandien"} onClick={() => setTab("šiandien")} />
-        <MobileNav label="Sekimas" active={tab === "sekimas"} onClick={() => setTab("sekimas")} badge={stats.trackingIssues} />
+        <MobileNav label="Knygos" active={tab === "knygos"} onClick={() => setTab("knygos")} badge={stats.trackingIssues} />
         <MobileNav label="Kalend." active={tab === "kalendorius"} onClick={() => setTab("kalendorius")} badge={stats.pickupsToday} />
         <MobileNav label="Ieško" active={tab === "kontaktai"} onClick={() => setTab("kontaktai")} badge={stats.waitingContacts} />
         <MobileNav label="Stat." active={tab === "statistika"} onClick={() => setTab("statistika")} />
@@ -678,7 +677,7 @@ function DashboardSidebar({ stats, query, setQuery, setTab, enableNotifications,
         <FilterSelect label="Atsakingas" options={["Visi", "Agnė", "Almantas", "Abu"]} />
         <FilterSelect label="Veiksmas" options={["Visi", "Paskambinti", "Paėmimas", "Paslėpti skelbimą", "Papildyti savikainą"]} />
 
-        <button onClick={() => setTab("sekimas")} className="h-12 rounded-xl bg-[#e87500] px-4 text-left text-base font-semibold text-white">Atnaujinti platformų sekimą</button>
+        <button onClick={() => setTab("knygos")} className="h-12 rounded-xl bg-[#e87500] px-4 text-left text-base font-semibold text-white">Knygos ir paskelbimai</button>
         <button onClick={() => setTab("kalendorius")} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Planuoti paėmimą</button>
         <button onClick={() => setTab("statistika")} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Žiūrėti statistiką</button>
         <button onClick={enableNotifications} className="h-12 rounded-xl border border-[#e2e8f0] px-4 text-left text-base font-semibold text-[#334155]">Įjungti telefono pranešimus</button>
@@ -702,108 +701,6 @@ function FilterSelect({ label, options }: { label: string; options: string[] }) 
         {options.map((option) => <option key={option}>{option}</option>)}
       </select>
     </label>
-  );
-}
-
-function TrackingScreen({ books, sources, presence, selectedSource, runTrackingSync }: { books: Book[]; sources: TrackingSource[]; presence: ListingPresence[]; selectedSource: SourceFilter; runTrackingSync: () => void }) {
-  const sourceOrder: SourceKey[] = ["wp", "sena", "vinted1", "vinted2", "vinted3"];
-  const visibleSources = selectedSource === "all" ? sourceOrder : [selectedSource];
-  const selectedSourceName = selectedSource === "all" ? "visose platformose" : sources.find((source) => source.key === selectedSource)?.name ?? "platformoje";
-  const uploadedListings = presence.filter((listing) => visibleSources.includes(listing.source) && listing.status !== "neįkelta");
-  const matrixBooks = books.slice(0, 120);
-
-  return (
-    <section className="grid gap-5">
-      <div className="rounded-xl border border-[#e2e8f0] bg-white p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-black tracking-[-0.03em]">Kur įkelta</h2>
-            <p className="mt-1 text-base text-[#475569]">WP, Sena.lt ir trys Vinted paskyros tikrinamos kaip atskiri šaltiniai.</p>
-          </div>
-          <button onClick={runTrackingSync} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white">Atnaujinti sekimą</button>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {sources.map((source) => (
-            <article key={source.key} className="rounded-md border border-[#e87500] bg-white p-3">
-              <p className="text-sm font-black uppercase text-[#d85f2a]">{source.type}</p>
-              <h3 className="mt-1 font-semibold">{source.name}</h3>
-              <p className="mt-1 text-base text-[#475569]">{source.account}</p>
-              <p className="mt-2 text-xs text-[#475569]">{source.method}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-sm font-semibold">
-                <span className={source.status === "prijungta" ? "rounded-full bg-[#e8f7df] px-2 py-1 text-[#285b22]" : "rounded-full bg-[#fff0d8] px-2 py-1 text-[#9a3412]"}>
-                  {source.status}
-                </span>
-                <span className="rounded-full bg-white px-2 py-1 text-[#475569]">{source.found} skelb.</span>
-                {!!source.issues && <span className="rounded-full bg-[#ffe0d6] px-2 py-1 text-[#9a3412]">{source.issues} neatit.</span>}
-              </div>
-              <p className="mt-2 text-xs text-[#475569]">Tikrinta: {source.lastChecked}</p>
-            </article>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-[#e87500] bg-white">
-        <div className="border-b border-[#e2e8f0] p-4">
-          <h2 className="text-2xl font-black tracking-[-0.03em]">Įkelta {selectedSourceName}</h2>
-          <p className="mt-1 text-base text-[#475569]">Pasirink platformą kairėje ir čia matysi, kas joje yra įkelta.</p>
-        </div>
-        <div className="divide-y divide-[#e2e8f0]">
-          {uploadedListings.map((listing) => {
-            const book = books.find((entry) => entry.id === listing.bookId);
-            const source = sources.find((entry) => entry.key === listing.source);
-            return (
-              <article key={`${listing.bookId}-${listing.source}`} className="grid gap-3 p-4 lg:grid-cols-[1fr_180px_160px_160px] lg:items-center">
-                <div>
-                  <p className="text-sm font-black uppercase text-[#d85f2a]">{source?.name}</p>
-                  <h3 className="mt-1 text-xl font-black tracking-[-0.03em] text-[#020817]">{book?.title ?? "Knyga"}</h3>
-                </div>
-                <p className="text-base text-[#475569]">Būsena: <b>{listing.status}</b></p>
-                <p className="text-base text-[#475569]">Kaina: <b>{listing.price ? money(listing.price) : "be kainos"}</b></p>
-                <p className="text-base text-[#475569]">Matyta: <b>{listing.lastSeen}</b></p>
-              </article>
-            );
-          })}
-          {!uploadedListings.length && <p className="p-4 text-base text-[#475569]">Šioje platformoje įkeltų skelbimų nėra.</p>}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-[#e2e8f0] bg-white">
-        <div className="border-b border-[#e2e8f0] p-4">
-          <h2 className="text-2xl font-black tracking-[-0.03em]">Knygų platformų matrica</h2>
-          <p className="mt-1 text-base text-[#475569]">Rodoma {matrixBooks.length} iš {books.length} knygų, kad sekimo ekranas veiktų greitai.</p>
-        </div>
-        <div className="divide-y divide-[#e2e8f0]">
-          {matrixBooks.map((book) => (
-            <article key={book.id} className="grid gap-3 p-4 xl:grid-cols-[1fr_2fr]">
-              <div className="flex gap-3">
-                <img src={book.image} alt="" className="h-16 w-12 rounded-md object-cover" />
-                <div>
-                  <h3 className="font-semibold">{book.title}</h3>
-                  <p className="mt-1 text-base text-[#475569]">Likutis: <b>{book.stock}</b> / Vieta: <b>{book.storage}</b></p>
-                </div>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                {visibleSources.map((sourceKey) => {
-                  const source = sources.find((entry) => entry.key === sourceKey);
-                  const listing = presence.find((entry) => entry.bookId === book.id && entry.source === sourceKey);
-                  return (
-                    <div key={sourceKey} className="rounded-md border border-[#f1dfc9] p-3 text-sm">
-                      <p className="font-semibold">{source?.name}</p>
-                      <p className={`mt-1 text-sm font-semibold ${listing?.status === "aktyvu" ? "text-[#285b22]" : listing?.status === "reikia patikrinti" ? "text-[#9a3412]" : "text-[#475569]"}`}>
-                        {listing?.status ?? "nežinoma"}
-                      </p>
-                      <p className="mt-1 text-xs text-[#475569]">{listing?.price ? money(listing.price) : "be kainos"}</p>
-                      <p className="mt-1 text-xs text-[#475569]">Matyta: {listing?.lastSeen ?? "-"}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-
-    </section>
   );
 }
 
@@ -1461,8 +1358,24 @@ function CalendarPanel({ calendar, updateStatus, updateEvent, compact }: { calen
   );
 }
 
-function BookRow({ book, sales }: { book: Book; sales: Sale[] }) {
+function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[] }) {
   const sold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
+  const platformRows = sources.map((source) => {
+    const tracked = presence.find((listing) => listing.source === source.key);
+    const local = source.key === "wp"
+      ? book.listings.find((listing) => listing.platform === "WooCommerce")
+      : source.key === "sena"
+        ? book.listings.find((listing) => listing.platform === "Sena.lt")
+        : book.listings.find((listing) => listing.platform === "Vinted");
+    return {
+      source,
+      status: tracked?.status ?? local?.status ?? "neįkelta",
+      price: tracked?.price ?? local?.price ?? 0,
+      url: tracked?.url ?? "",
+      lastSeen: tracked?.lastSeen,
+    };
+  });
+
   return (
     <article className="grid grid-cols-[64px_1fr] gap-4 p-4">
       <img src={book.image} alt="" className="h-20 w-16 rounded-md object-cover" />
@@ -1476,8 +1389,29 @@ function BookRow({ book, sales }: { book: Book; sales: Sale[] }) {
           <span>Įsigyta: <b>{book.acquiredAt}</b></span>
           <span>Kaina: <b>{money(book.recommendedPrice)}</b></span>
         </div>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {book.listings.map((listing) => <span key={listing.platform} className="rounded-full bg-white px-2 py-1 text-sm font-semibold text-[#475569]">{listing.platform}: {listing.status}</span>)}
+        <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+          {platformRows.map((row) => {
+            const content = (
+              <>
+                <span className="font-black">{row.source.name}</span>
+                <span className={row.status === "aktyvu" ? "text-[#285b22]" : row.status === "parduota" ? "text-[#9a3412]" : "text-[#475569]"}>
+                  {row.status}
+                </span>
+                <span className="text-[#475569]">{row.price ? money(row.price) : "be kainos"}</span>
+                {row.lastSeen && <span className="text-[#64748b]">matyta: {row.lastSeen}</span>}
+              </>
+            );
+            const className = "grid gap-1 rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-sm";
+            return row.url ? (
+              <a key={row.source.key} href={row.url} target="_blank" rel="noreferrer" className={`${className} hover:border-[#e87500]`}>
+                {content}
+              </a>
+            ) : (
+              <div key={row.source.key} className={className}>
+                {content}
+              </div>
+            );
+          })}
         </div>
       </div>
     </article>
