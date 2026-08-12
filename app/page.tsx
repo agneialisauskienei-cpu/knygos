@@ -259,6 +259,7 @@ export default function Home() {
   const [sortFilter, setSortFilter] = useState<SortFilter>("title");
   const [notice, setNotice] = useState("Pranešimai telefone dar neįjungti");
   const [syncingWp, setSyncingWp] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
@@ -517,6 +518,7 @@ export default function Home() {
 
     setSyncingWp(true);
     setNotice("Atnaujinama iš skaitytaknyga.lt ir Sena.lt...");
+    setSyncMessage("Vyksta atnaujinimas, tikrinama skaitytaknyga.lt ir Sena.lt...");
 
     try {
       const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
@@ -627,11 +629,14 @@ export default function Home() {
       setBooksState(updatedBooks);
       persistBooks(updatedBooks);
       setSelectedSource("all");
-      setNotice(`Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}.`);
+      const successMessage = `Atnaujinta: WP rasta ${wpFound}, Sena.lt rasta ${senaFound}, susieta ${senaPresence.length}, naujai įrašyta ${importedCount}.`;
+      setNotice(successMessage);
+      setSyncMessage(successMessage);
       syncOk = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nežinoma klaida";
       setNotice(`WP atnaujinti nepavyko: ${message}`);
+      setSyncMessage(`Nepavyko atnaujinti: ${message}`);
       setItems((current) => [
         {
           id: crypto.randomUUID(),
@@ -797,7 +802,14 @@ export default function Home() {
                     Rodoma {visibleBooks.length} iš {filteredBooks.length} rastų knygų. Iš viso kataloge: {books.length}.
                   </p>
                 </div>
-                <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP ir Sena.lt"}</button>
+                <div className="grid gap-2 justify-self-start xl:justify-self-end">
+                  <button onClick={runTrackingSync} disabled={syncingWp} className="h-10 rounded-md bg-[#e87500] px-4 text-base font-semibold text-white disabled:cursor-wait disabled:opacity-70">{syncingWp ? "Atnaujinama..." : "Atnaujinti WP ir Sena.lt"}</button>
+                  {syncMessage && (
+                    <p className={`rounded-lg border px-3 py-2 text-sm font-semibold ${syncMessage.startsWith("Nepavyko") ? "border-[#fecaca] bg-[#fff1f2] text-[#9f1239]" : "border-[#bbf7d0] bg-[#f0fdf4] text-[#166534]"}`}>
+                      {syncMessage}
+                    </p>
+                  )}
+                </div>
                 <details className="xl:col-span-2 rounded-xl border border-[#e87500] bg-white p-3">
                   <summary className="cursor-pointer text-base font-black text-[#020817]">Filtrai ir rikiavimas</summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
