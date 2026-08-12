@@ -206,26 +206,26 @@ const wantedContactsSeed: WantedContact[] = [
 
 const trackingSeed: TrackingSource[] = [
   { key: "wp", name: "skaitytaknyga.lt", type: "WooCommerce", account: "WP / WooCommerce", method: "WooCommerce REST API", status: "prijungta", lastChecked: "šiandien 10:42", found: 128, issues: 1 },
-  { key: "sena", name: "Sena.lt", type: "Sena.lt", account: "Agnės paskyra", method: "Skelbimų adapteris arba CSV importas", status: "reikia prisijungti", lastChecked: "vakar 18:05", found: 42, issues: 3 },
-  { key: "vinted1", name: "Vinted #1", type: "Vinted", account: "Agnė", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:20", found: 71, issues: 2 },
-  { key: "vinted2", name: "Vinted #2", type: "Vinted", account: "Almantas", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:18", found: 36, issues: 0 },
-  { key: "vinted3", name: "Vinted #3", type: "Vinted", account: "Rezervinė", method: "Rankinis CSV arba naršyklės patikra", status: "reikia prisijungti", lastChecked: "nepatikrinta", found: 0, issues: 0 },
+  { key: "sena", name: "Sena.lt", type: "Sena.lt", account: "skaitytaknygalt", method: "https://www.sena.lt/vartotojas/skaitytaknygalt", status: "prijungta", lastChecked: "vakar 18:05", found: 42, issues: 3 },
+  { key: "vinted1", name: "Vinted #1", type: "Vinted", account: "agneali1990", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:20", found: 71, issues: 2 },
+  { key: "vinted2", name: "Vinted #2", type: "Vinted", account: "almisali", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "šiandien 09:18", found: 36, issues: 0 },
+  { key: "vinted3", name: "Vinted #3", type: "Vinted", account: "wp.vizija", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "nepatikrinta", found: 0, issues: 0 },
 ];
 
 const listingPresenceSeed: ListingPresence[] = [
   { bookId: "b1", source: "wp", status: "aktyvu", price: 8, url: "https://skaitytaknyga.lt/sachta", lastSeen: "šiandien" },
-  { bookId: "b1", source: "sena", status: "parduota", price: 8.5, url: "https://sena.lt/sachta", lastSeen: "vakar" },
-  { bookId: "b1", source: "vinted1", status: "aktyvu", price: 7, url: "https://www.vinted.lt/items/sachta", lastSeen: "šiandien" },
+  { bookId: "b1", source: "sena", status: "parduota", price: 8.5, url: "https://www.sena.lt/vartotojas/skaitytaknygalt", lastSeen: "vakar" },
+  { bookId: "b1", source: "vinted1", status: "aktyvu", price: 7, url: "https://www.vinted.lt/member/agneali1990", lastSeen: "šiandien" },
   { bookId: "b1", source: "vinted2", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
   { bookId: "b1", source: "vinted3", status: "reikia patikrinti", price: 0, url: "", lastSeen: "nepatikrinta" },
   { bookId: "b2", source: "wp", status: "aktyvu", price: 6.5, url: "https://skaitytaknyga.lt/metai", lastSeen: "šiandien" },
-  { bookId: "b2", source: "sena", status: "aktyvu", price: 6, url: "https://sena.lt/metai", lastSeen: "vakar" },
+  { bookId: "b2", source: "sena", status: "aktyvu", price: 6, url: "https://www.sena.lt/vartotojas/skaitytaknygalt", lastSeen: "vakar" },
   { bookId: "b2", source: "vinted1", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
-  { bookId: "b2", source: "vinted2", status: "aktyvu", price: 6, url: "https://www.vinted.lt/items/metai", lastSeen: "šiandien" },
+  { bookId: "b2", source: "vinted2", status: "aktyvu", price: 6, url: "https://www.vinted.lt/member/almisali", lastSeen: "šiandien" },
   { bookId: "b2", source: "vinted3", status: "neįkelta", price: 0, url: "", lastSeen: "nepatikrinta" },
   { bookId: "b3", source: "wp", status: "parduota", price: 9, url: "https://skaitytaknyga.lt/kava", lastSeen: "šiandien" },
   { bookId: "b3", source: "sena", status: "neįkelta", price: 0, url: "", lastSeen: "vakar" },
-  { bookId: "b3", source: "vinted1", status: "aktyvu", price: 8, url: "https://www.vinted.lt/items/kava", lastSeen: "šiandien" },
+  { bookId: "b3", source: "vinted1", status: "aktyvu", price: 8, url: "https://www.vinted.lt/member/agneali1990", lastSeen: "šiandien" },
   { bookId: "b3", source: "vinted2", status: "neįkelta", price: 0, url: "", lastSeen: "šiandien" },
   { bookId: "b3", source: "vinted3", status: "neįkelta", price: 0, url: "", lastSeen: "nepatikrinta" },
 ];
