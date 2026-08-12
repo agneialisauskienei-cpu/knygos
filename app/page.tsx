@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { booksSeed } from "./books-data";
+import { agneali1990UnmatchedSales, agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const APP_PASSWORD = "knygos2026";
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
@@ -115,7 +116,17 @@ type MarketplaceProduct = {
   url: string;
 };
 
-const salesSeed: Sale[] = [];
+const salesSeed: Sale[] = agneali1990VintedSales.map((sale, index) => ({
+  id: `agneali1990-${index}-${sale.bookId}`,
+  bookId: sale.bookId,
+  platform: "Vinted",
+  soldAt: "2026-08-12",
+  quantity: 1,
+  salePrice: sale.price,
+  purchaseCost: 0,
+  fees: 0,
+  packing: 0,
+}));
 
 const workSeed: WorkItem[] = [];
 
@@ -149,18 +160,34 @@ function money(value: number) {
 }
 
 function decodeText(value: string) {
-  return value
+  const decoded = value
     .replace(/&#8211;|&ndash;/g, "–")
     .replace(/&#8212;|&mdash;/g, "—")
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#039;|&apos;/g, "'")
     .replace(/&nbsp;/g, " ");
+  if (!/[ÄÅÐÑâ]/.test(decoded)) return decoded;
+
+  try {
+    return decodeURIComponent(
+      Array.from(decoded)
+        .map((char) => `%${(char.charCodeAt(0) & 255).toString(16).padStart(2, "0")}`)
+        .join(""),
+    );
+  } catch {
+    return decoded;
+  }
 }
 
 function saleProfit(sale: Sale) {
   if (sale.purchaseCost === undefined) return undefined;
   return sale.salePrice - sale.purchaseCost - sale.fees - sale.packing;
+}
+
+function saleSourceLabel(sale: Sale) {
+  if (sale.id.startsWith("agneali1990-")) return "Vinted / agneali1990";
+  return sale.platform;
 }
 
 function daysBetween(start: string, end: string) {
@@ -1088,6 +1115,7 @@ function ContactsScreen({ contacts, addWantedContact, updateWantedStatus }: { co
 
 function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: Sale[]; updateSalePrice: (id: string, salePrice: number) => void }) {
   const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+  const unmatchedTotal = agneali1990UnmatchedSales.reduce((sum, sale) => sum + sale.price, 0);
   const bookStats = books.map((book) => {
     const bookSales = sales.filter((sale) => sale.bookId === book.id);
     const enteredSoldCount = bookSales.reduce((sum, sale) => sum + sale.quantity, 0);
@@ -1138,7 +1166,7 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
           return (
             <article key={sale.id} className="grid gap-3 p-5 lg:grid-cols-[1fr_160px_160px_160px] lg:items-center">
               <div>
-                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d85f2a]">{sale.platform} / {sale.soldAt}</p>
+                <p className="text-sm font-black uppercase tracking-[0.18em] text-[#d85f2a]">{saleSourceLabel(sale)} / {sale.soldAt}</p>
                 <h3 className="mt-1 text-2xl font-black tracking-[-0.03em] text-[#020817]">{book ? decodeText(book.title) : "Knyga"}</h3>
               </div>
               <p className="text-base text-[#475569]">Kiekis: <b>{sale.quantity}</b></p>
@@ -1156,6 +1184,27 @@ function SalesScreen({ books, sales, updateSalePrice }: { books: Book[]; sales: 
             </article>
           );
         })}
+      </div>
+    </div>
+
+    <div className="rounded-xl border border-[#e87500] bg-white">
+      <div className="border-b border-[#e2e8f0] p-5">
+        <p className="text-sm font-black uppercase tracking-[0.3em] text-[#e87500]">agneali1990</p>
+        <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-[#020817]">Nesuvesti Vinted pardavimai</h2>
+        <p className="mt-2 text-base text-[#475569]">
+          {agneali1990UnmatchedSales.length} įrašai, {money(unmatchedTotal)}. Rinkinių ir netikslių pavadinimų nepririšau prie knygų.
+        </p>
+      </div>
+      <div className="max-h-[520px] overflow-auto divide-y divide-[#e2e8f0]">
+        {agneali1990UnmatchedSales.map((sale, index) => (
+          <article key={`${sale.title}-${index}`} className="grid gap-2 p-4 md:grid-cols-[1fr_150px_190px] md:items-center">
+            <h3 className="text-xl font-black tracking-[-0.03em] text-[#020817]">{decodeText(sale.title)}</h3>
+            <p className="text-base text-[#475569]">Kaina: <b>{money(sale.price)}</b></p>
+            <p className="w-fit rounded-full bg-[#fff3df] px-3 py-1 text-sm font-bold text-[#8a3b00]">
+              {sale.reason === "rinkinys" ? "Rinkinys" : sale.reason === "dublikatas kataloge" ? `Keli sutapimai (${sale.matches})` : "Nerasta kataloge"}
+            </p>
+          </article>
+        ))}
       </div>
     </div>
     </section>
