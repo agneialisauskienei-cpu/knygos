@@ -195,7 +195,16 @@ const trackingSeed: TrackingSource[] = [
   { key: "vinted3", name: "wp.vizija", type: "Vinted", account: "wp.vizija", method: "Viešų skelbimų sekimas / eksportas", status: "prijungta", lastChecked: "nepatikrinta", found: 0, issues: 0 },
 ];
 
-const listingPresenceSeed: ListingPresence[] = [];
+const listingPresenceSeed: ListingPresence[] = [
+  {
+    bookId: "woo-28065",
+    source: "sena",
+    status: "aktyvu",
+    price: 18,
+    url: "https://www.sena.lt/vartotojas/skaitytaknygalt",
+    lastSeen: "patvirtinta rankiniu būdu",
+  },
+];
 
 const platforms: Platform[] = ["WooCommerce", "Vinted", "Sena.lt", "Facebook", "Gyvai", "Kita"];
 const august2026Days = Array.from({ length: 31 }, (_, index) => {
@@ -320,7 +329,15 @@ function loadListingPresence() {
   if (typeof window === "undefined") return listingPresenceSeed;
   try {
     const saved = window.localStorage.getItem(PRESENCE_STORAGE_KEY);
-    return saved ? JSON.parse(saved) as ListingPresence[] : listingPresenceSeed;
+    if (!saved) return listingPresenceSeed;
+    const stored = JSON.parse(saved) as ListingPresence[];
+    const merged = new Map(stored.map((listing) => [`${listing.bookId}-${listing.source}`, listing]));
+    for (const seed of listingPresenceSeed) {
+      const key = `${seed.bookId}-${seed.source}`;
+      const current = merged.get(key);
+      if (!current || current.status === "neįkelta") merged.set(key, seed);
+    }
+    return Array.from(merged.values());
   } catch {
     return listingPresenceSeed;
   }
