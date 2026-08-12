@@ -299,6 +299,7 @@ export default function Home() {
 
   function addSale(formData: FormData) {
     const bookId = String(formData.get("bookId"));
+    const soldBook = books.find((book) => book.id === bookId);
     const sale: Sale = {
       id: crypto.randomUUID(),
       bookId,
@@ -312,6 +313,39 @@ export default function Home() {
     };
     setSales((current) => [sale, ...current]);
     saveBooks((current) => current.map((entry) => (entry.id === bookId ? { ...entry, stock: Math.max(0, entry.stock - sale.quantity) } : entry)));
+
+    const stockAfterSale = Math.max(0, (soldBook?.stock ?? 0) - sale.quantity);
+    if ((sale.platform === "Sena.lt" || sale.platform === "Vinted") && soldBook && stockAfterSale === 0) {
+      const activePlaces = [
+        ...soldBook.listings
+          .filter((listing) => listing.status === "aktyvu" && listing.platform !== sale.platform)
+          .map((listing) => listing.platform),
+        ...listingPresence
+          .filter((listing) => listing.bookId === soldBook.id && listing.status === "aktyvu")
+          .map((listing) => trackingSources.find((source) => source.key === listing.source)?.name)
+          .filter((name): name is string => Boolean(name)),
+      ];
+      const placesToRemove = Array.from(new Set(activePlaces.filter((place) => place !== sale.platform)));
+
+      if (placesToRemove.length) {
+        const task: WorkItem = {
+          id: crypto.randomUUID(),
+          kind: "reminder",
+          title: `Išimti skelbimus: ${soldBook.title}`,
+          detail: `Parduota per ${sale.platform}, sandėlyje liko 0. Reikia išimti skelbimą: ${placesToRemove.join(", ")}.`,
+          source: "Pardavimas",
+          due: "dabar",
+          assignee: "Agne",
+          status: "nauja",
+          urgent: true,
+        };
+        setItems((current) => [task, ...current]);
+
+        if ("Notification" in window && Notification.permission === "granted") {
+          new Notification("Reikia išimti skelbimą", { body: `${soldBook.title}: ${placesToRemove.join(", ")}` });
+        }
+      }
+    }
   }
 
   function updateSalePrice(id: string, salePrice: number) {
