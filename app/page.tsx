@@ -382,6 +382,21 @@ function matchBookByTitle(books: Book[], title: string) {
 
   const sourceTokens = titleTokens(title);
   if (sourceTokens.length < 2) return undefined;
+  const sourceTokenSet = new Set(sourceTokens);
+  const subsetMatches = books
+    .map((book) => {
+      const bookTokens = titleTokens(book.title);
+      const bookTokenSet = new Set(bookTokens);
+      const bookInSource = bookTokens.length >= 2 && bookTokens.every((token) => sourceTokenSet.has(token));
+      const sourceInBook = sourceTokens.length >= 2 && sourceTokens.every((token) => bookTokenSet.has(token));
+      const score = bookTokens.length ? bookTokens.filter((token) => sourceTokenSet.has(token)).length / bookTokens.length : 0;
+      return { book, bookTokens, bookInSource, sourceInBook, score };
+    })
+    .filter((match) => match.bookInSource || match.sourceInBook)
+    .sort((a, b) => b.score - a.score || a.bookTokens.length - b.bookTokens.length);
+  if (subsetMatches.length === 1) return subsetMatches[0].book;
+  if (subsetMatches.length > 1 && subsetMatches[0].score > subsetMatches[1].score) return subsetMatches[0].book;
+
   const tokenMatches = books
     .map((book) => ({ book, score: tokenMatchScore(title, book.title) }))
     .filter((match) => match.score >= (sourceTokens.length === 2 ? 1 : 0.82))
@@ -696,6 +711,28 @@ function reviewBookFromListing(listing: UnmatchedListing, platform: Platform): B
   };
 }
 
+function mergedBookRecord(keep: Book, duplicate: Book) {
+  const listings = [...keep.listings];
+  for (const listing of duplicate.listings) {
+    const existing = listings.find((entry) => entry.platform === listing.platform);
+    if (!existing) {
+      listings.push(listing);
+      continue;
+    }
+    if (existing.status === "neįkelta" && listing.status !== "neįkelta") existing.status = listing.status;
+    if (!existing.price && listing.price) existing.price = listing.price;
+    existing.sales = Math.max(existing.sales, listing.sales);
+  }
+  return {
+    ...keep,
+    stock: Math.max(keep.stock, duplicate.stock),
+    storage: keep.storage || duplicate.storage,
+    purchasePrice: keep.purchasePrice ?? duplicate.purchasePrice,
+    recommendedPrice: Math.max(keep.recommendedPrice, duplicate.recommendedPrice),
+    listings,
+  };
+}
+
 function duplicateCandidates(books: Book[]) {
   const catalogBooks = books.filter((book) => !isReviewBook(book));
   const groups = new Map<string, Book[]>();
@@ -849,6 +886,66 @@ export default function Home() {
     saveSales((current) => [...importedSales.filter((sale) => !current.some((entry) => entry.id === sale.id)), ...current]);
     setSyncMessage(`wp.vizija istorija įkelta: ${importedSales.length}, susieta ${matched}, peržiūrai ${reviewBooks.length}. Likučiai nekeisti.`);
   }, [remoteStateLoaded]);
+
+  useEffect(() => {
+    if (!remoteStateLoaded) return;
+    const catalogBooks = books.filter((book) => !isReviewBook(book));
+    const matches = books
+      .filter(isReviewBook)
+      .map((duplicate) => ({ duplicate, keep: matchBookByTitle(catalogBooks, duplicate.title) }))
+      .filter((match): match is { duplicate: Book; keep: Book } => Boolean(match.keep));
+    if (!matches.length) return;
+
+    const duplicateToKeep = new Map(matches.map((match) => [match.duplicate.id, match.keep.id]));
+    const duplicateIds = new Set(duplicateToKeep.keys());
+
+    saveBooks((current) => {
+      const currentById = new Map(current.map((book) => [book.id, book]));
+      const duplicatesByKeep = new Map<string, Book[]>();
+      for (const match of matches) {
+        const duplicate = currentById.get(match.duplicate.id) ?? match.duplicate;
+        duplicatesByKeep.set(match.keep.id, [...(duplicatesByKeep.get(match.keep.id) ?? []), duplicate]);
+      }
+
+      return current
+        .filter((book) => !duplicateIds.has(book.id))
+        .map((book) => {
+          const duplicates = duplicatesByKeep.get(book.id);
+          if (!duplicates?.length) return book;
+          return duplicates.reduce((merged, duplicate) => mergedBookRecord(merged, duplicate), book);
+        });
+    });
+
+    setListingPresence((current) => {
+      const merged = new Map<string, ListingPresence>();
+      for (const listing of current) {
+        const bookId = duplicateToKeep.get(listing.bookId) ?? listing.bookId;
+        const key = `${bookId}-${listing.source}`;
+        const existing = merged.get(key);
+        if (!existing || (existing.status === "neįkelta" && listing.status !== "neįkelta")) {
+          merged.set(key, { ...listing, bookId });
+        }
+      }
+      const next = Array.from(merged.values());
+      persistListingPresence(next);
+      return next;
+    });
+
+    saveSales((current) =>
+      current.map((sale) => {
+        const bookId = duplicateToKeep.get(sale.bookId);
+        return bookId ? { ...sale, bookId } : sale;
+      }),
+    );
+
+    setUnmatchedListings((current) => {
+      const next = current.filter((listing) => !duplicateIds.has(unmatchedBookId(listing)));
+      persistUnmatchedListings(next);
+      return next;
+    });
+
+    setFilterMessage(`Automatiškai sujungta ${matches.length} įraš. iš „reikia patikrinti“ su katalogo knygomis.`);
+  }, [books, remoteStateLoaded]);
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
