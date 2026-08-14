@@ -51,11 +51,11 @@ export async function GET(request: Request) {
     if (activeSearch) params.set("search", activeSearch);
     const url = `https://skaitytaknyga.lt/wp-json/wc/store/products?${params.toString()}`;
     const response = await fetch(url, {
+      cache: "no-store",
       headers: {
         accept: "application/json",
         "user-agent": "KnyguApskaita/1.0",
       },
-      next: { revalidate: 300 },
     });
 
     if (!response.ok) {

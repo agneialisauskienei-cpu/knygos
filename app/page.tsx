@@ -682,6 +682,40 @@ export default function Home() {
     setItems((current) => current.filter((item) => item.id !== id));
   }
 
+  function markBookSoldOut(bookId: string) {
+    const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+    const book = books.find((entry) => entry.id === bookId);
+    saveBooks((current) =>
+      current.map((entry) => {
+        if (entry.id !== bookId) return entry;
+        const hasWooListing = entry.listings.some((listing) => listing.platform === "WooCommerce");
+        return {
+          ...entry,
+          stock: 0,
+          listings: hasWooListing
+            ? entry.listings.map((listing) => listing.platform === "WooCommerce" ? { ...listing, status: "parduota" } : listing)
+            : [{ platform: "WooCommerce", status: "parduota", price: entry.recommendedPrice, sales: 0 }, ...entry.listings],
+        };
+      }),
+    );
+    setListingPresence((current) => {
+      const next = [
+        {
+          bookId,
+          source: "wp" as SourceKey,
+          status: "parduota" as const,
+          price: book?.recommendedPrice ?? 0,
+          url: "",
+          lastSeen: checkedAt,
+        },
+        ...current.filter((listing) => !(listing.bookId === bookId && listing.source === "wp")),
+      ];
+      persistListingPresence(next);
+      return next;
+    });
+    setFilterMessage(`Pažymėta kaip parduota: ${book ? decodeText(book.title) : "knyga"}.`);
+  }
+
   function updateCalendarStatus(id: string, status: CalendarEvent["status"]) {
     setCalendar((current) => current.map((event) => (event.id === id ? { ...event, status } : event)));
   }
@@ -1327,7 +1361,7 @@ export default function Home() {
                 {filteredUnmatched.map((listing) => (
                   <UnmatchedListingRow key={`${listing.source}-${listing.id}`} listing={listing} books={books} attach={attachUnmatchedListing} />
                 ))}
-                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
+                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} markSoldOut={markBookSoldOut} />)}
               </div>
               {duplicates.length > 0 && (
                 <div className="border-t border-[#e2e8f0] p-4">
@@ -2231,7 +2265,7 @@ function DuplicatePanel({ duplicates, mergeDuplicateBook }: { duplicates: Duplic
   );
 }
 
-function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[] }) {
+function BookRow({ book, sales, presence, sources, markSoldOut }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[]; markSoldOut: (bookId: string) => void }) {
   const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   const oldSold = historicalSales(book);
   const sold = enteredSold + oldSold;
@@ -2265,7 +2299,14 @@ function BookRow({ book, sales, presence, sources }: { book: Book; sales: Sale[]
       <div>
         <h3 className="font-semibold">{title}</h3>
         <div className="mt-2 grid gap-1 text-base text-[#475569] sm:grid-cols-4">
-          <span>Likutis: <b>{effectiveStock(book)}</b></span>
+          <span className="flex flex-wrap items-center gap-2">
+            Likutis: <b>{effectiveStock(book)}</b>
+            {effectiveStock(book) > 0 && (
+              <button type="button" onClick={() => markSoldOut(book.id)} className="rounded-md border border-[#fed7aa] px-2 py-1 text-xs font-bold text-[#c2410c]">
+                Likutis 0
+              </button>
+            )}
+          </span>
           <span>Parduota: <b>{sold}</b>{oldSold ? <em className="not-italic text-[#64748b]"> / WP {oldSold}</em> : null}</span>
           <span>Pardavimų suma: <b>{money(soldRevenue)}</b></span>
           <span>Vid. kaina: <b>{sold ? money(averagePrice) : "nėra"}</b></span>
