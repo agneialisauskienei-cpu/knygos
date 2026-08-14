@@ -651,7 +651,7 @@ export default function Home() {
   const [selectedSource, setSelectedSource] = useState<SourceFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [salesCountFilter, setSalesCountFilter] = useState<SalesCountFilter>("all");
-  const [sortFilter, setSortFilter] = useState<SortFilter>("title");
+  const [sortFilter, setSortFilter] = useState<SortFilter>("newest");
   const [syncingWp, setSyncingWp] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(true);
@@ -991,22 +991,7 @@ export default function Home() {
       });
     }
 
-    if (reviewBooks.length) {
-      saveBooks((current) => [...reviewBooks.filter((book) => !current.some((entry) => entry.id === book.id)), ...current]);
-    }
-    if (shouldAdjustStock) {
-      const quantities = importedSales.reduce((map, sale) => {
-        map.set(sale.bookId, (map.get(sale.bookId) ?? 0) + sale.quantity);
-        return map;
-      }, new Map<string, number>());
-      saveBooks((current) =>
-        current.map((book) => {
-          const soldQuantity = quantities.get(book.id) ?? 0;
-          return soldQuantity ? { ...book, stock: Math.max(0, book.stock - soldQuantity) } : book;
-        }),
-      );
-    }
-
+    let newSalesForStock: Sale[] = [];
     saveSales((current) => {
       const existing = new Set(current.map((sale) => sale.id));
       const nextSales = importedSales.filter((sale) => {
@@ -1016,7 +1001,22 @@ export default function Home() {
         }
         return true;
       });
+      newSalesForStock = nextSales;
       return [...nextSales, ...current];
+    });
+    saveBooks((current) => {
+      const withReviewBooks = reviewBooks.length
+        ? [...reviewBooks.filter((book) => !current.some((entry) => entry.id === book.id)), ...current]
+        : current;
+      if (!shouldAdjustStock || !newSalesForStock.length) return withReviewBooks;
+      const quantities = newSalesForStock.reduce((map, sale) => {
+        map.set(sale.bookId, (map.get(sale.bookId) ?? 0) + sale.quantity);
+        return map;
+      }, new Map<string, number>());
+      return withReviewBooks.map((book) => {
+        const soldQuantity = quantities.get(book.id) ?? 0;
+        return soldQuantity ? { ...book, stock: Math.max(0, book.stock - soldQuantity) } : book;
+      });
     });
 
     setTrackingSources((current) =>
