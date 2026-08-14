@@ -762,8 +762,15 @@ export default function Home() {
   }
 
   function addSale(formData: FormData) {
-    const bookId = String(formData.get("bookId"));
-    const soldBook = books.find((book) => book.id === bookId);
+    const typedBookTitle = String(formData.get("bookSearch") || "").replace(/\s+—.+$/, "");
+    const requestedBookId = String(formData.get("bookId") || "");
+    const soldBook = books.find((book) => book.id === requestedBookId) ?? matchBookByTitle(books, typedBookTitle);
+    if (!soldBook) {
+      setFilterMessage(`Nepavyko rasti knygos pagal paiešką: ${typedBookTitle || "neįvesta"}.`);
+      setTab("ivedimas");
+      return;
+    }
+    const bookId = soldBook.id;
     const sale: Sale = {
       id: crypto.randomUUID(),
       bookId,
@@ -2367,7 +2374,22 @@ function BookRow({ book, sales, presence, sources, markSoldOut }: { book: Book; 
   );
 }
 
+function saleBookLabel(book: Book) {
+  return `${decodeText(book.title)} — likutis ${effectiveStock(book)}, ${money(book.recommendedPrice)}`;
+}
+
 function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importMarketplacePaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importMarketplacePaste: (data: FormData) => void }) {
+  const saleBookOptions = useMemo(
+    () =>
+      [...books]
+        .filter((book) => !isReviewBook(book))
+        .sort((a, b) => decodeText(a.title).localeCompare(decodeText(b.title), "lt")),
+    [books],
+  );
+  const firstSaleBook = saleBookOptions[0];
+  const [saleBookSearch, setSaleBookSearch] = useState(firstSaleBook ? saleBookLabel(firstSaleBook) : "");
+  const selectedSaleBook = saleBookOptions.find((book) => saleBookLabel(book) === saleBookSearch);
+
   return (
     <section className="grid gap-5 lg:grid-cols-3">
       <form action={importBookBatch} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
@@ -2396,7 +2418,19 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importM
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
         <div className="mt-4 grid gap-3">
-          <select name="bookId" className="field">{books.map((book) => <option key={book.id} value={book.id}>{decodeText(book.title)}</option>)}</select>
+          <input type="hidden" name="bookId" value={selectedSaleBook?.id ?? ""} />
+          <input
+            name="bookSearch"
+            list="sale-book-options"
+            value={saleBookSearch}
+            onChange={(event) => setSaleBookSearch(event.target.value)}
+            placeholder="Ieškoti knygos"
+            className="field"
+            required
+          />
+          <datalist id="sale-book-options">
+            {saleBookOptions.map((book) => <option key={book.id} value={saleBookLabel(book)} />)}
+          </datalist>
           <select name="platform" className="field">{platforms.map((platform) => <option key={platform}>{platform}</option>)}</select>
           <div className="grid grid-cols-2 gap-2">
             <input name="salePrice" type="number" step="0.01" placeholder="Kaina" className="field" required />
