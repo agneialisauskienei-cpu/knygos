@@ -10,7 +10,7 @@ const SALES_STORAGE_KEY = "knygu-apskaita-sales-v1";
 const PRESENCE_STORAGE_KEY = "knygu-apskaita-listings-v1";
 const UNMATCHED_STORAGE_KEY = "knygu-apskaita-unmatched-v1";
 
-type Platform = "WooCommerce" | "Vinted" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
+type Platform = "WooCommerce" | "Vinted" | "Vinted / agneali1990" | "Vinted / almisali" | "Vinted / wp.vizija" | "Sena.lt" | "Facebook" | "Gyvai" | "Kita";
 type SourceKey = "wp" | "sena" | "vinted1" | "vinted2" | "vinted3";
 type SourceFilter = SourceKey | "all";
 type StatusFilter = "all" | "aktyvu" | "parduota" | "neįkelta" | "reikia patikrinti" | "juodraščiai";
@@ -225,7 +225,7 @@ const listingPresenceSeed: ListingPresence[] = [
   },
 ];
 
-const platforms: Platform[] = ["WooCommerce", "Vinted", "Sena.lt", "Facebook", "Gyvai", "Kita"];
+const platforms: Platform[] = ["WooCommerce", "Sena.lt", "Vinted / agneali1990", "Vinted / almisali", "Vinted / wp.vizija", "Vinted", "Facebook", "Gyvai", "Kita"];
 const august2026Days = Array.from({ length: 31 }, (_, index) => {
   const day = index + 1;
   const date = new Date(2026, 7, day);
@@ -546,7 +546,7 @@ function parseWalletSalesPaste(rawText: string, source: SourceKey) {
       title,
       soldAt: dateLine,
       salePrice: price,
-      platform: source.startsWith("vinted") ? "Vinted" : sourcePlatform(source),
+      platform: salePlatformFromSource(source),
       source,
     });
   }
@@ -575,6 +575,13 @@ function sourcePlatform(source: SourceKey): Platform {
   if (source === "sena") return "Sena.lt";
   if (source.startsWith("vinted")) return "Vinted";
   return "WooCommerce";
+}
+
+function salePlatformFromSource(source: SourceKey): Platform {
+  if (source === "vinted1") return "Vinted / agneali1990";
+  if (source === "vinted2") return "Vinted / almisali";
+  if (source === "vinted3") return "Vinted / wp.vizija";
+  return sourcePlatform(source);
 }
 
 function unmatchedBookId(listing: Pick<UnmatchedListing, "source" | "title">) {
@@ -845,7 +852,7 @@ export default function Home() {
       id: crypto.randomUUID(),
       bookId,
       platform: String(formData.get("platform")) as Platform,
-      soldAt: "2026-08-12",
+      soldAt: String(formData.get("soldAt") || new Date().toISOString().slice(0, 10)),
       quantity: Number(formData.get("quantity")),
       salePrice: Number(formData.get("salePrice")),
       purchaseCost: Number(formData.get("purchaseCost") || 0),
@@ -856,7 +863,7 @@ export default function Home() {
     saveBooks((current) => current.map((entry) => (entry.id === bookId ? { ...entry, stock: Math.max(0, entry.stock - sale.quantity) } : entry)));
 
     const stockAfterSale = Math.max(0, (soldBook?.stock ?? 0) - sale.quantity);
-    if ((sale.platform === "Sena.lt" || sale.platform === "Vinted") && soldBook && stockAfterSale === 0) {
+    if ((sale.platform === "Sena.lt" || sale.platform.startsWith("Vinted")) && soldBook && stockAfterSale === 0) {
       const activePlaces = [
         ...soldBook.listings
           .filter((listing) => listing.status === "aktyvu" && listing.platform !== sale.platform)
@@ -937,6 +944,7 @@ export default function Home() {
   function importSalesPaste(formData: FormData) {
     const source = String(formData.get("source") || "vinted3") as SourceKey;
     const rows = parseWalletSalesPaste(String(formData.get("salesList") || ""), source);
+    const shouldAdjustStock = formData.get("adjustStock") === "on";
     const sourceName = sourceDisplayName(source);
     const today = new Date().toISOString().slice(0, 10);
     let matched = 0;
@@ -986,6 +994,18 @@ export default function Home() {
     if (reviewBooks.length) {
       saveBooks((current) => [...reviewBooks.filter((book) => !current.some((entry) => entry.id === book.id)), ...current]);
     }
+    if (shouldAdjustStock) {
+      const quantities = importedSales.reduce((map, sale) => {
+        map.set(sale.bookId, (map.get(sale.bookId) ?? 0) + sale.quantity);
+        return map;
+      }, new Map<string, number>());
+      saveBooks((current) =>
+        current.map((book) => {
+          const soldQuantity = quantities.get(book.id) ?? 0;
+          return soldQuantity ? { ...book, stock: Math.max(0, book.stock - soldQuantity) } : book;
+        }),
+      );
+    }
 
     saveSales((current) => {
       const existing = new Set(current.map((sale) => sale.id));
@@ -1006,7 +1026,7 @@ export default function Home() {
           : trackingSource,
       ),
     );
-    setSyncMessage(`${sourceName} pardavimai importuoti: ${importedSales.length - skipped}, susieta ${matched}, peržiūrai ${createdReview}, praleista dubl. ${skipped}. Praeities datų likučiai nekeisti.`);
+    setSyncMessage(`${sourceName} pardavimai importuoti: ${importedSales.length - skipped}, susieta ${matched}, peržiūrai ${createdReview}, praleista dubl. ${skipped}. ${shouldAdjustStock ? "Likučiai nurašyti pagal importą." : "Likučiai nekeisti."}`);
     setTab("knygos");
   }
 
@@ -2569,6 +2589,10 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importM
           <option value="vinted2">almisali</option>
           <option value="vinted3">wp.vizija</option>
         </select>
+        <label className="mt-3 flex items-center gap-2 text-base font-semibold text-[#475569]">
+          <input type="checkbox" name="adjustStock" className="h-4 w-4 accent-[#e87500]" />
+          Nurašyti likučius pagal šį importą
+        </label>
         <textarea
           name="salesList"
           placeholder={"Pardavimas\nBeyond good and evil\n13,50 €\n2026-08-09\nPardavimas\nTrys muškietininkai\n3,00 €\n2026-08-08"}
@@ -2597,6 +2621,7 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importM
           <div className="grid grid-cols-2 gap-2">
             <input name="salePrice" type="number" step="0.01" placeholder="Kaina" className="field" required />
             <input name="quantity" type="number" min="1" defaultValue="1" className="field" required />
+            <input name="soldAt" type="date" defaultValue="2026-08-14" className="field" required />
             <input name="purchaseCost" type="number" step="0.01" placeholder="Savikaina" className="field" />
             <input name="fees" type="number" step="0.01" placeholder="Mokestis" className="field" />
             <input name="packing" type="number" step="0.01" placeholder="Pakavimas" className="field" />
