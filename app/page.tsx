@@ -180,7 +180,7 @@ const wpVizijaWalletHistory = `2026-07-01 | Pardavimas | Dabartinė lietuvių ka
 2026-08-08 | Pardavimas | Trys muškietininkai | 3,00 €
 2026-08-09 | Pardavimas | Beyond good and evil | 13,50 €`;
 
-const wpVizijaListingsImport = `Pamilk save ir būk laimingas | 10,00 €
+const agneali1990ListingsImport = `Pamilk save ir būk laimingas | 10,00 €
 Geri darbai gamtai | 10,00 €
 Emociškai nebrandžių tėvų vaikai | 18,00 €
 The Interpretation of Dreams | 20,00 €
@@ -965,13 +965,15 @@ export default function Home() {
 
   useEffect(() => {
     if (!remoteStateLoaded) return;
-    const source: SourceKey = "vinted3";
+    const source: SourceKey = "vinted1";
+    const wrongSource: SourceKey = "vinted3";
     const platform = sourcePlatform(source);
-    const products = parseMarketplacePaste(wpVizijaListingsImport, source);
+    const products = parseMarketplacePaste(agneali1990ListingsImport, source);
     if (!products.length) return;
 
     const catalogBooks = books.filter((book) => !isReviewBook(book));
     const checkedAt = "įkelta iš rankinio sąrašo";
+    const importedTitleKeys = new Set(products.map((product) => titleKey(product.title)));
     const presenceRows: ListingPresence[] = [];
     const reviewBooks: Book[] = [];
     const unmatched: UnmatchedListing[] = [];
@@ -1010,6 +1012,14 @@ export default function Home() {
       saveBooks((current) => {
         const withPresence = current.map((book) => {
           const row = presenceRows.find((presence) => presence.bookId === book.id);
+          const isWrongReviewSource = isReviewBook(book) && importedTitleKeys.has(titleKey(book.title)) && book.id.startsWith(`review-${wrongSource}-`);
+          if (isWrongReviewSource) {
+            return {
+              ...book,
+              id: `review-${source}-${titleKey(book.title).replace(/\s+/g, "-")}`,
+              storage: book.storage.replace(sourceDisplayName(wrongSource), sourceDisplayName(source)),
+            };
+          }
           if (!row) return book;
           const hasMarketplaceListing = book.listings.some((listing) => listing.platform === platform);
           return {
@@ -1027,7 +1037,12 @@ export default function Home() {
       setListingPresence((current) => {
         const next = [
           ...presenceRows,
-          ...current.filter((listing) => !(listing.source === source && presenceRows.some((row) => row.bookId === listing.bookId))),
+          ...current.filter((listing) => {
+            const relatedBook = books.find((book) => book.id === listing.bookId);
+            const isWrongSourceForThisImport = listing.source === wrongSource && relatedBook && importedTitleKeys.has(titleKey(relatedBook.title));
+            const isReplacedSourceRow = listing.source === source && presenceRows.some((row) => row.bookId === listing.bookId);
+            return !isWrongSourceForThisImport && !isReplacedSourceRow;
+          }),
         ];
         persistListingPresence(next);
         return next;
@@ -1044,7 +1059,7 @@ export default function Home() {
       });
     }
 
-    setSyncMessage(`wp.vizija įkėlimai sutvarkyti: susieta ${matched}, reikia patikrinti ${reviewBooks.length}.`);
+    setSyncMessage(`agneali1990 įkėlimai sutvarkyti: susieta ${matched}, reikia patikrinti ${reviewBooks.length}.`);
   }, [books, listingPresence, remoteStateLoaded, unmatchedListings]);
 
   const stats = useMemo(() => {
