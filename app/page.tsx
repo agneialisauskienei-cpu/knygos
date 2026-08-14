@@ -143,6 +143,43 @@ type AppStatePayload = {
   unmatchedListings?: UnmatchedListing[];
 };
 
+const wpVizijaWalletHistory = `2026-07-01 | Pardavimas | Dabartinė lietuvių kalbos | 6,00 €
+2026-07-02 | Pardavimas | Tender is the night | 3,80 €
+2026-07-02 | Pardavimas | Vakarykštis pasaulis | 10,00 €
+2026-07-02 | Pardavimas | Dostojevskis | 4,15 €
+2026-07-02 | Pirkimas | Fioletowa sukienka m | -24,90 €
+2026-07-03 | Pardavimas | Paulo Coelho urmas | 12,00 €
+2026-07-04 | Pardavimas | Titano sirenos | 2,00 €
+2026-07-08 | Pardavimas | Baltoji iltis | 5,50 €
+2026-07-09 | Pardavimas | Andželos pelenai | 18,00 €
+2026-07-09 | Pardavimas | Prietrankos dienoraštis | 3,80 €
+2026-07-11 | Pardavimas | Graikų mitai | 2,50 €
+2026-07-15 | Pardavimas | Laimė yra lapė | 18,00 €
+2026-07-15 | Pirkimas | Šacha ir pamaina | -65,05 €
+2026-07-16 | Pardavimas | Georgi Gospodinov – Liūdesio fizika | 10,00 €
+2026-07-16 | Pinigų grąžinimas | Šacha ir pamaina | 65,05 €
+2026-07-16 | Pardavimas | Senovės Graikų mitai ir legendos | 5,00 €
+2026-07-17 | Pardavimas | Odisėja | 9,00 €
+2026-07-17 | Pardavimas | Ulisas | 9,00 €
+2026-07-20 | Pardavimas | Grafas Montekristas | 8,00 €
+2026-07-22 | Pardavimas | Mylimi kaulai | 12,00 €
+2026-07-24 | Pardavimas | Nemuno žiedas | 8,00 €
+2026-07-25 | Pardavimas | Mikaldos pranašavimai | 4,00 €
+2026-07-25 | Pardavimas | Grammaire progressive | 6,00 €
+2026-07-26 | Pardavimas | Autism | 23,00 €
+2026-07-28 | Pardavimas | Bruno Ferre | 12,00 €
+2026-07-28 | Pardavimas | Egzistencializmas - tai humanizmas | 20,00 €
+2026-07-30 | Pardavimas | Rugiuose prie bedugnės | 6,00 €
+2026-07-30 | Pardavimas | Art Therapy theories | 35,00 €
+2026-07-31 | Pardavimas | Paryžiaus Katedros kuprius | 15,00 €
+2026-07-31 | Pardavimas | Ted talks | 20,00 €
+2026-08-04 | Pardavimas | Orvelas | 9,00 €
+2026-08-05 | Pardavimas | Žinia, kurią mums praneša vanduo | 17,50 €
+2026-08-06 | Pardavimas | Nuostabusis Ozo šalies | 12,00 €
+2026-08-07 | Pardavimas | Lolita | 6,17 €
+2026-08-08 | Pardavimas | Trys muškietininkai | 3,00 €
+2026-08-09 | Pardavimas | Beyond good and evil | 13,50 €`;
+
 const salesSeed: Sale[] = [
   ...agneali1990VintedSales.map((sale, index) => ({
     id: `agneali1990-${index}-${sale.bookId}`,
@@ -539,6 +576,25 @@ function parseWalletSalesPaste(rawText: string, source: SourceKey) {
     .filter(Boolean);
   const rows: SaleImportRow[] = [];
 
+  for (const line of lines) {
+    const parts = line.split("|").map((part) => part.trim());
+    if (parts.length < 4) continue;
+    const [dateLine, typeLine, title, priceLine] = parts;
+    if (!/^pardavimas$/i.test(typeLine) || !/^\d{4}-\d{2}-\d{2}$/.test(dateLine)) continue;
+    const priceMatch = priceLine.match(/(-?\d+(?:[,.]\d{1,2})?)\s*(?:€|Eur|EUR)/i);
+    if (!priceMatch) continue;
+    const price = Number(priceMatch[1].replace(",", "."));
+    if (price <= 0) continue;
+    rows.push({
+      title,
+      soldAt: dateLine,
+      salePrice: price,
+      platform: salePlatformFromSource(source),
+      source,
+    });
+  }
+  if (rows.length) return rows;
+
   for (let index = 0; index < lines.length; index += 1) {
     if (!/^pardavimas$/i.test(lines[index])) continue;
     const title = lines[index + 1];
@@ -719,6 +775,61 @@ export default function Home() {
     }, 600);
     return () => window.clearTimeout(timeout);
   }, [books, sales, listingPresence, unmatchedListings, remoteStateLoaded, remoteStateEnabled]);
+
+  useEffect(() => {
+    if (!remoteStateLoaded) return;
+    const source: SourceKey = "vinted3";
+    const rows = parseWalletSalesPaste(wpVizijaWalletHistory, source);
+    const existingSaleIds = new Set(sales.map((sale) => sale.id));
+    const rowsToImport = rows.filter((row) => !existingSaleIds.has(`${source}-${row.soldAt}-${titleKey(row.title)}-${row.salePrice}`));
+    if (!rowsToImport.length) return;
+
+    const catalogBooks = books.filter((book) => !isReviewBook(book));
+    const currentBookIds = new Set(books.map((book) => book.id));
+    const reviewBooks: Book[] = [];
+    const importedSales: Sale[] = [];
+    let matched = 0;
+
+    for (const row of rowsToImport) {
+      const matchedBook = matchBookByTitle(catalogBooks, row.title);
+      const book =
+        matchedBook ??
+        reviewBooks.find((entry) => entry.id === unmatchedBookId({ source, title: row.title })) ??
+        reviewBookFromListing(
+          {
+            id: `${source}-sale-${titleKey(row.title)}-${row.soldAt}`,
+            title: row.title,
+            price: row.salePrice,
+            url: marketplaceUrl(source),
+            source,
+            importedAt: row.soldAt,
+          },
+          row.platform,
+        );
+
+      if (!matchedBook && !currentBookIds.has(book.id) && !reviewBooks.some((entry) => entry.id === book.id)) {
+        reviewBooks.push(book);
+      }
+      if (matchedBook) matched += 1;
+      importedSales.push({
+        id: `${source}-${row.soldAt}-${titleKey(row.title)}-${row.salePrice}`,
+        bookId: book.id,
+        platform: row.platform,
+        soldAt: row.soldAt,
+        quantity: 1,
+        salePrice: row.salePrice,
+        purchaseCost: matchedBook?.purchasePrice ?? 0,
+        fees: 0,
+        packing: 0,
+      });
+    }
+
+    if (reviewBooks.length) {
+      saveBooks((current) => [...reviewBooks.filter((book) => !current.some((entry) => entry.id === book.id)), ...current]);
+    }
+    saveSales((current) => [...importedSales.filter((sale) => !current.some((entry) => entry.id === sale.id)), ...current]);
+    setSyncMessage(`wp.vizija istorija įkelta: ${importedSales.length}, susieta ${matched}, peržiūrai ${reviewBooks.length}. Likučiai nekeisti.`);
+  }, [remoteStateLoaded]);
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
