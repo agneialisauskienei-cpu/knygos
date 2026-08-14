@@ -366,6 +366,10 @@ function wpProductStock(product: WpProduct, fallback = 1) {
   return fallback;
 }
 
+function wpBookId(productId: number) {
+  return `woo-${productId}`;
+}
+
 function mergeBooksWithSeed(storedBooks: Book[]) {
   const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
   const seedByTitle = new Map((booksSeed as Book[]).map((book) => [titleKey(book.title), book]));
@@ -1005,17 +1009,19 @@ export default function Home() {
       if (!Array.isArray(data.products)) throw new Error("WP grąžino netinkamą produktų formatą");
       wpFound = data.total || data.products.length || books.length;
       const syncedBooks = new Map<string, Book>();
-      const syncedKeys = new Set<string>();
+      const syncedByProductId = new Map<number, Book>();
+      const syncedBookIds = new Set<string>();
+      const byWpId = new Map(books.map((book) => [book.id, book]));
       const byTitle = new Map(books.map((book) => [titleKey(book.title), book]));
       const nextBooks = [...books];
 
       for (const product of data.products.filter((entry) => entry.title)) {
         const key = titleKey(product.title);
-        syncedKeys.add(key);
-        let book = byTitle.get(key);
+        const productBookId = wpBookId(product.id);
+        let book = byWpId.get(productBookId) ?? byWpId.get(`wp-${product.id}`) ?? byTitle.get(key);
         if (!book) {
           book = {
-            id: `wp-${product.id}`,
+            id: productBookId,
             title: product.title,
             image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
             stock: wpProductStock(product),
@@ -1052,12 +1058,14 @@ export default function Home() {
           if (index !== -1) nextBooks[index] = book;
           byTitle.set(key, book);
         }
+        syncedBookIds.add(book.id);
         syncedBooks.set(key, book);
+        syncedByProductId.set(product.id, book);
       }
 
       for (let index = 0; index < nextBooks.length; index += 1) {
         const book = nextBooks[index];
-        if (isReviewBook(book) || syncedKeys.has(titleKey(book.title))) continue;
+        if (isReviewBook(book) || syncedBookIds.has(book.id)) continue;
         if (syncQueryKey && !titleKey(book.title).includes(syncQueryKey)) continue;
         const wooListing = book.listings.find((listing) => listing.platform === "WooCommerce");
         if (!wooListing || wooListing.status === "neįkelta" || wooListing.status === "parduota") continue;
@@ -1075,7 +1083,7 @@ export default function Home() {
 
       wpPresence = data.products
         .map((product) => {
-          const book = syncedBooks.get(titleKey(product.title));
+          const book = syncedByProductId.get(product.id) ?? syncedBooks.get(titleKey(product.title));
           if (!book) return null;
           return {
             bookId: book.id,
