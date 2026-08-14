@@ -355,12 +355,14 @@ function historicalRevenue(book: Book) {
 function effectiveStock(book: Book) {
   const wpListing = book.listings.find((listing) => listing.platform === "WooCommerce");
   if (wpListing?.status === "parduota") return 0;
+  if (wpListing?.status === "aktyvu" && book.stock > 20) return 1;
   return book.stock;
 }
 
 function wpProductStock(product: WpProduct, fallback = 1) {
   if (product.stockStatus === "outofstock") return 0;
   if (typeof product.stockQuantity === "number") return Math.max(0, product.stockQuantity);
+  if (fallback > 20) return 1;
   return fallback;
 }
 
@@ -1284,9 +1286,6 @@ export default function Home() {
                   </div>
                 </details>
                 {filterMessage && <p className="xl:col-span-2 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3 py-2 text-sm font-semibold text-[#166534]">{filterMessage}</p>}
-                {duplicates.length > 0 && (
-                  <DuplicatePanel duplicates={duplicates} mergeDuplicateBook={mergeDuplicateBook} />
-                )}
               </div>
               <div className="divide-y divide-[#e2e8f0]">
                 {filteredUnmatched.map((listing) => (
@@ -1294,6 +1293,11 @@ export default function Home() {
                 ))}
                 {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} />)}
               </div>
+              {duplicates.length > 0 && (
+                <div className="border-t border-[#e2e8f0] p-4">
+                  <DuplicatePanel duplicates={duplicates} mergeDuplicateBook={mergeDuplicateBook} />
+                </div>
+              )}
             </section>
           )}
           {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importMarketplacePaste={importMarketplacePaste} />}
@@ -2165,11 +2169,10 @@ function UnmatchedListingRow({ listing, books, attach }: { listing: UnmatchedLis
 
 function DuplicatePanel({ duplicates, mergeDuplicateBook }: { duplicates: DuplicateCandidate[]; mergeDuplicateBook: (keepId: string, duplicateId: string) => void }) {
   return (
-    <section className="xl:col-span-2 rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-base font-black text-[#020817]">Galimi dubliai</h3>
-        <span className="text-sm font-semibold text-[#9a3412]">{duplicates.length} reikia patikrinti</span>
-      </div>
+    <details className="rounded-xl border border-[#fed7aa] bg-[#fff7ed] p-3">
+      <summary className="cursor-pointer text-base font-black text-[#020817]">
+        Galimi dubliai <span className="ml-2 text-sm font-semibold text-[#9a3412]">{duplicates.length}</span>
+      </summary>
       <div className="mt-3 grid gap-2">
         {duplicates.slice(0, 6).map((candidate) => (
           <div key={`${candidate.keep.id}-${candidate.duplicate.id}`} className="grid gap-2 rounded-lg border border-[#fed7aa] bg-white p-3 lg:grid-cols-[1fr_auto] lg:items-center">
@@ -2188,7 +2191,7 @@ function DuplicatePanel({ duplicates, mergeDuplicateBook }: { duplicates: Duplic
           </div>
         ))}
       </div>
-    </section>
+    </details>
   );
 }
 
