@@ -543,6 +543,25 @@ function parseMarketplacePaste(rawText: string, source: SourceKey) {
   const products: MarketplaceProduct[] = [];
   const seen = new Set<string>();
 
+  for (const line of lines) {
+    const parts = line.split("|").map((part) => part.trim());
+    if (parts.length < 2) continue;
+    const [title, priceLine] = parts;
+    if (!title || /^\d{4}-\d{2}-\d{2}$/.test(title)) continue;
+    const priceMatch = priceLine.match(/(\d+(?:[,.]\d{1,2})?)\s*(?:€|Eur|EUR)/i);
+    if (!priceMatch) continue;
+    const key = titleKey(title);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    products.push({
+      id: `${source}-simple-${key}`,
+      title,
+      price: Number(priceMatch[1].replace(",", ".")),
+      url: marketplaceUrl(source),
+    });
+  }
+  if (products.length) return products;
+
   for (let index = 0; index < lines.length - 4; index += 1) {
     const title = lines[index];
     const views = lines[index + 1];
@@ -2775,14 +2794,14 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importM
       </form>
       <form action={importMarketplacePaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Importuoti įkėlimus</h2>
-        <p className="mt-2 text-base text-[#475569]">Įklijuok Sena.lt arba Vinted paskyros prekių tekstą. Programa pažymės rastas knygas kaip aktyvias pasirinktoje platformoje.</p>
+        <p className="mt-2 text-base text-[#475569]">Įklijuok prekių tekstą arba eilutes „Pavadinimas | kaina“. Programa pažymės rastas knygas kaip aktyvias pasirinktoje platformoje.</p>
         <select name="source" defaultValue="sena" className="field mt-4">
           <option value="sena">Sena.lt</option>
           <option value="vinted1">agneali1990</option>
           <option value="vinted2">almisali</option>
           <option value="vinted3">wp.vizija</option>
         </select>
-        <textarea name="marketplaceList" placeholder="Įklijuok prekių sąrašą" className="mt-3 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
+        <textarea name="marketplaceList" placeholder={"Pamilk save ir būk laimingas | 10,00 €\nGeri darbai gamtai | 10,00 €"} className="mt-3 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
         <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti sąrašą</button>
       </form>
       <form action={importSalesPaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
