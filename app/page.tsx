@@ -6,6 +6,7 @@ import { senaSales } from "./sena-sales";
 import { agneali1990VintedSales } from "./vinted-agneali1990-sales";
 
 const BOOK_STORAGE_KEY = "knygu-apskaita-books-v1";
+const SALES_STORAGE_KEY = "knygu-apskaita-sales-v1";
 const PRESENCE_STORAGE_KEY = "knygu-apskaita-listings-v1";
 const UNMATCHED_STORAGE_KEY = "knygu-apskaita-unmatched-v1";
 
@@ -125,6 +126,14 @@ type MarketplaceProduct = {
 type UnmatchedListing = MarketplaceProduct & {
   source: SourceKey;
   importedAt: string;
+};
+
+type SaleImportRow = {
+  title: string;
+  soldAt: string;
+  salePrice: number;
+  platform: Platform;
+  source: SourceKey;
 };
 
 const salesSeed: Sale[] = [
@@ -409,6 +418,30 @@ function persistBooks(books: Book[]) {
   }
 }
 
+function loadSales() {
+  if (typeof window === "undefined") return salesSeed;
+  try {
+    const saved = window.localStorage.getItem(SALES_STORAGE_KEY);
+    if (!saved) return salesSeed;
+    const stored = JSON.parse(saved) as Sale[];
+    const merged = new Map(stored.map((sale) => [sale.id, sale]));
+    for (const seed of salesSeed) {
+      if (!merged.has(seed.id)) merged.set(seed.id, seed);
+    }
+    const next = Array.from(merged.values());
+    persistSales(next);
+    return next;
+  } catch {
+    return salesSeed;
+  }
+}
+
+function persistSales(sales: Sale[]) {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(sales));
+  }
+}
+
 function loadListingPresence() {
   if (typeof window === "undefined") return listingPresenceSeed;
   try {
@@ -492,6 +525,35 @@ function parseMarketplacePaste(rawText: string, source: SourceKey) {
   return products;
 }
 
+function parseWalletSalesPaste(rawText: string, source: SourceKey) {
+  const lines = decodeText(rawText)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const rows: SaleImportRow[] = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (!/^pardavimas$/i.test(lines[index])) continue;
+    const title = lines[index + 1];
+    const priceLine = lines[index + 2];
+    const dateLine = lines[index + 3];
+    if (!title || !priceLine || !dateLine) continue;
+    const priceMatch = priceLine.match(/(-?\d+(?:[,.]\d{1,2})?)\s*(?:€|Eur|EUR)/i);
+    if (!priceMatch || !/^\d{4}-\d{2}-\d{2}$/.test(dateLine)) continue;
+    const price = Number(priceMatch[1].replace(",", "."));
+    if (price <= 0) continue;
+    rows.push({
+      title,
+      soldAt: dateLine,
+      salePrice: price,
+      platform: source.startsWith("vinted") ? "Vinted" : sourcePlatform(source),
+      source,
+    });
+  }
+
+  return rows;
+}
+
 function marketplaceUrl(source: SourceKey) {
   if (source === "sena") return "https://www.sena.lt/vartotojas/skaitytaknygalt";
   if (source === "vinted1") return "https://www.vinted.lt/member/agneali1990";
@@ -571,7 +633,7 @@ function duplicateCandidates(books: Book[]) {
 export default function Home() {
   const [tab, setTab] = useState<Tab>("šiandien");
   const [books, setBooksState] = useState<Book[]>(loadBooks);
-  const [sales, setSales] = useState(salesSeed);
+  const [sales, setSalesState] = useState(loadSales);
   const [items, setItems] = useState(workSeed);
   const [calendar, setCalendar] = useState(calendarSeed);
   const [trackingSources, setTrackingSources] = useState(trackingSeed);
@@ -647,6 +709,14 @@ export default function Home() {
     setBooksState((current) => {
       const next = updater(current);
       persistBooks(next);
+      return next;
+    });
+  }
+
+  function saveSales(updater: (current: Sale[]) => Sale[]) {
+    setSalesState((current) => {
+      const next = updater(current);
+      persistSales(next);
       return next;
     });
   }
@@ -782,7 +852,7 @@ export default function Home() {
       fees: Number(formData.get("fees") || 0),
       packing: Number(formData.get("packing") || 0),
     };
-    setSales((current) => [sale, ...current]);
+    saveSales((current) => [sale, ...current]);
     saveBooks((current) => current.map((entry) => (entry.id === bookId ? { ...entry, stock: Math.max(0, entry.stock - sale.quantity) } : entry)));
 
     const stockAfterSale = Math.max(0, (soldBook?.stock ?? 0) - sale.quantity);
@@ -820,7 +890,7 @@ export default function Home() {
   }
 
   function updateSalePrice(id: string, salePrice: number) {
-    setSales((current) => current.map((sale) => (sale.id === id ? { ...sale, salePrice } : sale)));
+    saveSales((current) => current.map((sale) => (sale.id === id ? { ...sale, salePrice } : sale)));
   }
 
   function importBookBatch(formData: FormData) {
@@ -861,6 +931,82 @@ export default function Home() {
       })),
       ...current,
     ]);
+    setTab("knygos");
+  }
+
+  function importSalesPaste(formData: FormData) {
+    const source = String(formData.get("source") || "vinted3") as SourceKey;
+    const rows = parseWalletSalesPaste(String(formData.get("salesList") || ""), source);
+    const sourceName = sourceDisplayName(source);
+    const today = new Date().toISOString().slice(0, 10);
+    let matched = 0;
+    let createdReview = 0;
+    let skipped = 0;
+    const reviewBooks: Book[] = [];
+    const importedSales: Sale[] = [];
+    const catalogBooks = books.filter((book) => !isReviewBook(book));
+    const currentBookIds = new Set(books.map((book) => book.id));
+
+    for (const row of rows) {
+      const matchedBook = matchBookByTitle(catalogBooks, row.title);
+      const book =
+        matchedBook ??
+        reviewBooks.find((entry) => entry.id === unmatchedBookId({ source, title: row.title })) ??
+        reviewBookFromListing(
+          {
+            id: `${source}-sale-${titleKey(row.title)}-${row.soldAt}`,
+            title: row.title,
+            price: row.salePrice,
+            url: marketplaceUrl(source),
+            source,
+            importedAt: today,
+          },
+          row.platform,
+        );
+
+      if (!matchedBook && !currentBookIds.has(book.id) && !reviewBooks.some((entry) => entry.id === book.id)) {
+        reviewBooks.push(book);
+        createdReview += 1;
+      }
+      if (matchedBook) matched += 1;
+
+      importedSales.push({
+        id: `${source}-${row.soldAt}-${titleKey(row.title)}-${row.salePrice}`,
+        bookId: book.id,
+        platform: row.platform,
+        soldAt: row.soldAt,
+        quantity: 1,
+        salePrice: row.salePrice,
+        purchaseCost: matchedBook?.purchasePrice ?? 0,
+        fees: 0,
+        packing: 0,
+      });
+    }
+
+    if (reviewBooks.length) {
+      saveBooks((current) => [...reviewBooks.filter((book) => !current.some((entry) => entry.id === book.id)), ...current]);
+    }
+
+    saveSales((current) => {
+      const existing = new Set(current.map((sale) => sale.id));
+      const nextSales = importedSales.filter((sale) => {
+        if (existing.has(sale.id)) {
+          skipped += 1;
+          return false;
+        }
+        return true;
+      });
+      return [...nextSales, ...current];
+    });
+
+    setTrackingSources((current) =>
+      current.map((trackingSource) =>
+        trackingSource.key === source
+          ? { ...trackingSource, status: "prijungta", found: trackingSource.found, issues: createdReview, lastChecked: new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" }) }
+          : trackingSource,
+      ),
+    );
+    setSyncMessage(`${sourceName} pardavimai importuoti: ${importedSales.length - skipped}, susieta ${matched}, peržiūrai ${createdReview}, praleista dubl. ${skipped}. Praeities datų likučiai nekeisti.`);
     setTab("knygos");
   }
 
@@ -1028,7 +1174,7 @@ export default function Home() {
       persistListingPresence(next);
       return next;
     });
-    setSales((current) => current.map((sale) => (sale.bookId === duplicateId ? { ...sale, bookId: keepId } : sale)));
+    saveSales((current) => current.map((sale) => (sale.bookId === duplicateId ? { ...sale, bookId: keepId } : sale)));
     setFilterMessage(`Dublis sujungtas: ${decodeText(duplicate.title)} → ${decodeText(keep.title)}.`);
   }
 
@@ -1377,7 +1523,7 @@ export default function Home() {
               )}
             </section>
           )}
-          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importMarketplacePaste={importMarketplacePaste} />}
+          {tab === "ivedimas" && <EntryPanel books={books} addSale={addSale} addCalendarEvent={addCalendarEvent} importBookBatch={importBookBatch} importMarketplacePaste={importMarketplacePaste} importSalesPaste={importSalesPaste} />}
         </div>
       </div>
 
@@ -2378,7 +2524,7 @@ function saleBookLabel(book: Book) {
   return `${decodeText(book.title)} — likutis ${effectiveStock(book)}, ${money(book.recommendedPrice)}`;
 }
 
-function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importMarketplacePaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importMarketplacePaste: (data: FormData) => void }) {
+function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importMarketplacePaste, importSalesPaste }: { books: Book[]; addSale: (data: FormData) => void; addCalendarEvent: (data: FormData) => void; importBookBatch: (data: FormData) => void; importMarketplacePaste: (data: FormData) => void; importSalesPaste: (data: FormData) => void }) {
   const saleBookOptions = useMemo(
     () =>
       [...books]
@@ -2414,6 +2560,22 @@ function EntryPanel({ books, addSale, addCalendarEvent, importBookBatch, importM
         </select>
         <textarea name="marketplaceList" placeholder="Įklijuok prekių sąrašą" className="mt-3 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]" required />
         <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti sąrašą</button>
+      </form>
+      <form action={importSalesPaste} className="rounded-xl border border-[#e87500] bg-white p-4 lg:col-span-3">
+        <h2 className="text-2xl font-black tracking-[-0.03em]">Importuoti pardavimus iš Vinted piniginės</h2>
+        <p className="mt-2 text-base text-[#475569]">Įklijuok piniginės tekstą su eilutėmis: Pardavimas, pavadinimas, suma, data. Pirkimų ir grąžinimų neims.</p>
+        <select name="source" defaultValue="vinted3" className="field mt-4">
+          <option value="vinted1">agneali1990</option>
+          <option value="vinted2">almisali</option>
+          <option value="vinted3">wp.vizija</option>
+        </select>
+        <textarea
+          name="salesList"
+          placeholder={"Pardavimas\nBeyond good and evil\n13,50 €\n2026-08-09\nPardavimas\nTrys muškietininkai\n3,00 €\n2026-08-08"}
+          className="mt-3 min-h-44 w-full rounded-md border border-[#e2e8f0] bg-white p-3 text-base outline-none focus:border-[#e87500]"
+          required
+        />
+        <button className="mt-4 h-10 rounded-md bg-[#e87500] px-5 text-base font-semibold text-white">Importuoti pardavimus</button>
       </form>
       <form action={addSale} className="rounded-xl border border-[#e2e8f0] bg-white p-4">
         <h2 className="text-2xl font-black tracking-[-0.03em]">Pridėti pardavimą</h2>
