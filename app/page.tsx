@@ -1119,6 +1119,42 @@ export default function Home() {
     setFilterMessage(`Pažymėta kaip parduota: ${book ? decodeText(book.title) : "knyga"}.`);
   }
 
+  function markListingRemoved(bookId: string, source: SourceKey) {
+    const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+    const platform = sourcePlatform(source);
+    const book = books.find((entry) => entry.id === bookId);
+
+    if (source === "sena") {
+      saveBooks((current) =>
+        current.map((entry) => {
+          if (entry.id !== bookId) return entry;
+          return {
+            ...entry,
+            listings: entry.listings.map((listing) =>
+              listing.platform === platform ? { ...listing, status: "neįkelta", price: 0 } : listing,
+            ),
+          };
+        }),
+      );
+    }
+    setListingPresence((current) => {
+      const next = [
+        {
+          bookId,
+          source,
+          status: "neįkelta" as const,
+          price: 0,
+          url: "",
+          lastSeen: checkedAt,
+        },
+        ...current.filter((listing) => !(listing.bookId === bookId && listing.source === source)),
+      ];
+      persistListingPresence(next);
+      return next;
+    });
+    setFilterMessage(`${sourceDisplayName(source)} pažymėta kaip išimta: ${book ? decodeText(book.title) : "knyga"}.`);
+  }
+
   function updateCalendarStatus(id: string, status: CalendarEvent["status"]) {
     setCalendar((current) => current.map((event) => (event.id === id ? { ...event, status } : event)));
   }
@@ -1854,7 +1890,7 @@ export default function Home() {
                 {filteredUnmatched.map((listing) => (
                   <UnmatchedListingRow key={`${listing.source}-${listing.id}`} listing={listing} books={books} attach={attachUnmatchedListing} />
                 ))}
-                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} markSoldOut={markBookSoldOut} />)}
+                {visibleBooks.map((book) => <BookRow key={book.id} book={book} sales={sales.filter((sale) => sale.bookId === book.id)} presence={listingPresence.filter((listing) => listing.bookId === book.id)} sources={trackingSources} markSoldOut={markBookSoldOut} markListingRemoved={markListingRemoved} />)}
               </div>
               {duplicates.length > 0 && (
                 <div className="border-t border-[#e2e8f0] p-4">
@@ -2758,7 +2794,21 @@ function DuplicatePanel({ duplicates, mergeDuplicateBook }: { duplicates: Duplic
   );
 }
 
-function BookRow({ book, sales, presence, sources, markSoldOut }: { book: Book; sales: Sale[]; presence: ListingPresence[]; sources: TrackingSource[]; markSoldOut: (bookId: string) => void }) {
+function BookRow({
+  book,
+  sales,
+  presence,
+  sources,
+  markSoldOut,
+  markListingRemoved,
+}: {
+  book: Book;
+  sales: Sale[];
+  presence: ListingPresence[];
+  sources: TrackingSource[];
+  markSoldOut: (bookId: string) => void;
+  markListingRemoved: (bookId: string, source: SourceKey) => void;
+}) {
   const enteredSold = sales.reduce((sum, sale) => sum + sale.quantity, 0);
   const oldSold = historicalSales(book);
   const sold = enteredSold + oldSold;
@@ -2810,8 +2860,9 @@ function BookRow({ book, sales, presence, sources, markSoldOut }: { book: Book; 
         </div>
         <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
           {platformRows.map((row) => {
-            const content = (
-              <>
+            const canMarkRemoved = row.source.key !== "wp" && row.status !== "neįkelta";
+            return (
+              <div key={row.source.key} className="grid gap-2 rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-sm">
                 <span className="font-black">{row.source.name}</span>
                 <span className={row.status === "aktyvu" ? "text-[#285b22]" : row.status === "parduota" ? "text-[#9a3412]" : "text-[#475569]"}>
                   {row.status}
@@ -2819,16 +2870,20 @@ function BookRow({ book, sales, presence, sources, markSoldOut }: { book: Book; 
                 {!!row.sales && <span className="text-[#475569]">parduota: {row.sales}</span>}
                 <span className="text-[#475569]">{row.price ? money(row.price) : "be kainos"}</span>
                 {row.lastSeen && <span className="text-[#64748b]">matyta: {row.lastSeen}</span>}
-              </>
-            );
-            const className = "grid gap-1 rounded-md border border-[#e2e8f0] bg-white px-3 py-2 text-sm";
-            return row.url ? (
-              <a key={row.source.key} href={row.url} target="_blank" rel="noreferrer" className={`${className} hover:border-[#e87500]`}>
-                {content}
-              </a>
-            ) : (
-              <div key={row.source.key} className={className}>
-                {content}
+                {(row.url || canMarkRemoved) && (
+                  <span className="flex flex-wrap gap-2 pt-1">
+                    {row.url && (
+                      <a href={row.url} target="_blank" rel="noreferrer" className="rounded-md border border-[#e2e8f0] px-2 py-1 text-xs font-bold text-[#334155] hover:border-[#e87500]">
+                        Atidaryti
+                      </a>
+                    )}
+                    {canMarkRemoved && (
+                      <button type="button" onClick={() => markListingRemoved(book.id, row.source.key)} className="rounded-md border border-[#fed7aa] px-2 py-1 text-xs font-bold text-[#c2410c] hover:bg-[#fff7ed]">
+                        Išimta
+                      </button>
+                    )}
+                  </span>
+                )}
               </div>
             );
           })}
