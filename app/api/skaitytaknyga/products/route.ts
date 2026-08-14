@@ -30,6 +30,14 @@ function stockStatus(product: StoreProduct) {
   return product.stock_status ?? "instock";
 }
 
+function stockQuantity(product: StoreProduct) {
+  if (stockStatus(product) === "outofstock") return 0;
+  if (typeof product.low_stock_remaining === "number") return product.low_stock_remaining;
+  const maximum = product.add_to_cart?.maximum;
+  if (typeof maximum === "number" && maximum > 0 && maximum <= 20) return maximum;
+  return undefined;
+}
+
 export async function GET() {
   const products: StoreProduct[] = [];
   let total = 0;
@@ -75,14 +83,7 @@ export async function GET() {
       url: product.permalink ?? "",
       image: product.images?.[0]?.src ?? "",
       stockStatus: stockStatus(product),
-      stockQuantity:
-        product.stock_status === "outofstock" || product.is_in_stock === false
-          ? 0
-          : typeof product.low_stock_remaining === "number"
-            ? product.low_stock_remaining
-            : typeof product.add_to_cart?.maximum === "number"
-              ? product.add_to_cart.maximum
-              : undefined,
+      stockQuantity: stockQuantity(product),
     })),
   });
 }
