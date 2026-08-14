@@ -577,6 +577,10 @@ function sourcePlatform(source: SourceKey): Platform {
   return "WooCommerce";
 }
 
+function basePlatform(platform: Platform) {
+  return platform.startsWith("Vinted") ? "Vinted" : platform;
+}
+
 function salePlatformFromSource(source: SourceKey): Platform {
   if (source === "vinted1") return "Vinted / agneali1990";
   if (source === "vinted2") return "Vinted / almisali";
@@ -728,6 +732,42 @@ export default function Home() {
     });
   }
 
+  function activePlacesToRemove(book: Book, soldPlatform: Platform) {
+    const soldBase = basePlatform(soldPlatform);
+    const places = [
+      ...book.listings
+        .filter((listing) => listing.status === "aktyvu" && basePlatform(listing.platform) !== soldBase)
+        .map((listing) => listing.platform),
+      ...listingPresence
+        .filter((listing) => listing.bookId === book.id && listing.status === "aktyvu")
+        .map((listing) => trackingSources.find((source) => source.key === listing.source)?.name)
+        .filter((name): name is string => Boolean(name)),
+    ];
+    return Array.from(new Set(places.filter((place) => place !== soldPlatform)));
+  }
+
+  function addRemoveListingTask(book: Book, soldPlatform: Platform, placesToRemove: string[], reason: string) {
+    if (!placesToRemove.length) return;
+    setItems((current) => [
+      {
+        id: crypto.randomUUID(),
+        kind: "reminder",
+        title: `Išimti skelbimus: ${book.title}`,
+        detail: `${reason} Reikia išimti skelbimą: ${placesToRemove.join(", ")}.`,
+        source: "Pardavimas",
+        due: "dabar",
+        assignee: "Agne",
+        status: "nauja",
+        urgent: true,
+      },
+      ...current,
+    ]);
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Reikia išimti skelbimą", { body: `${book.title}: ${placesToRemove.join(", ")}` });
+    }
+  }
+
   function completeItem(id: string) {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, status: "atlikta" } : item)));
   }
@@ -864,35 +904,7 @@ export default function Home() {
 
     const stockAfterSale = Math.max(0, (soldBook?.stock ?? 0) - sale.quantity);
     if ((sale.platform === "Sena.lt" || sale.platform.startsWith("Vinted")) && soldBook && stockAfterSale === 0) {
-      const activePlaces = [
-        ...soldBook.listings
-          .filter((listing) => listing.status === "aktyvu" && listing.platform !== sale.platform)
-          .map((listing) => listing.platform),
-        ...listingPresence
-          .filter((listing) => listing.bookId === soldBook.id && listing.status === "aktyvu")
-          .map((listing) => trackingSources.find((source) => source.key === listing.source)?.name)
-          .filter((name): name is string => Boolean(name)),
-      ];
-      const placesToRemove = Array.from(new Set(activePlaces.filter((place) => place !== sale.platform)));
-
-      if (placesToRemove.length) {
-        const task: WorkItem = {
-          id: crypto.randomUUID(),
-          kind: "reminder",
-          title: `Išimti skelbimus: ${soldBook.title}`,
-          detail: `Parduota per ${sale.platform}, sandėlyje liko 0. Reikia išimti skelbimą: ${placesToRemove.join(", ")}.`,
-          source: "Pardavimas",
-          due: "dabar",
-          assignee: "Agne",
-          status: "nauja",
-          urgent: true,
-        };
-        setItems((current) => [task, ...current]);
-
-        if ("Notification" in window && Notification.permission === "granted") {
-          new Notification("Reikia išimti skelbimą", { body: `${soldBook.title}: ${placesToRemove.join(", ")}` });
-        }
-      }
+      addRemoveListingTask(soldBook, sale.platform, activePlacesToRemove(soldBook, sale.platform), `Parduota per ${sale.platform}, sandėlyje liko 0.`);
     }
   }
 
@@ -950,6 +962,7 @@ export default function Home() {
     let matched = 0;
     let createdReview = 0;
     let skipped = 0;
+    let zeroStockWarnings = 0;
     const reviewBooks: Book[] = [];
     const importedSales: Sale[] = [];
     const catalogBooks = books.filter((book) => !isReviewBook(book));
@@ -1015,7 +1028,28 @@ export default function Home() {
       }, new Map<string, number>());
       return withReviewBooks.map((book) => {
         const soldQuantity = quantities.get(book.id) ?? 0;
-        return soldQuantity ? { ...book, stock: Math.max(0, book.stock - soldQuantity) } : book;
+        if (!soldQuantity) return book;
+        const currentStock = effectiveStock(book);
+        if (currentStock <= 0) {
+          zeroStockWarnings += 1;
+          addRemoveListingTask(
+            book,
+            newSalesForStock.find((sale) => sale.bookId === book.id)?.platform ?? "Vinted",
+            activePlacesToRemove(book, newSalesForStock.find((sale) => sale.bookId === book.id)?.platform ?? "Vinted"),
+            `Importuotas pardavimas, bet likutis jau buvo 0.`,
+          );
+          return { ...book, stock: 0 };
+        }
+        if (soldQuantity > currentStock) {
+          zeroStockWarnings += 1;
+          addRemoveListingTask(
+            book,
+            newSalesForStock.find((sale) => sale.bookId === book.id)?.platform ?? "Vinted",
+            activePlacesToRemove(book, newSalesForStock.find((sale) => sale.bookId === book.id)?.platform ?? "Vinted"),
+            `Importuota daugiau pardavimų negu likutis (${soldQuantity} > ${currentStock}).`,
+          );
+        }
+        return { ...book, stock: Math.max(0, book.stock - soldQuantity) };
       });
     });
 
@@ -1026,7 +1060,7 @@ export default function Home() {
           : trackingSource,
       ),
     );
-    setSyncMessage(`${sourceName} pardavimai importuoti: ${importedSales.length - skipped}, susieta ${matched}, peržiūrai ${createdReview}, praleista dubl. ${skipped}. ${shouldAdjustStock ? "Likučiai nurašyti pagal importą." : "Likučiai nekeisti."}`);
+    setSyncMessage(`${sourceName} pardavimai importuoti: ${importedSales.length - skipped}, susieta ${matched}, peržiūrai ${createdReview}, praleista dubl. ${skipped}. ${shouldAdjustStock ? "Likučiai nurašyti pagal importą." : "Likučiai nekeisti."}${zeroStockWarnings ? ` Įspėjimų dėl 0 likučio: ${zeroStockWarnings}.` : ""}`);
     setTab("knygos");
   }
 
