@@ -988,16 +988,18 @@ export default function Home() {
 
   async function runTrackingSync() {
     const checkedAt = new Date().toLocaleString("lt-LT", { dateStyle: "short", timeStyle: "short" });
+    const syncQuery = query.trim();
+    const syncQueryKey = titleKey(syncQuery);
     let wpFound = books.length;
     let wpPresence: ListingPresence[] = [];
     let importedCount = 0;
     let syncOk = false;
 
     setSyncingWp(true);
-    setSyncMessage("Vyksta atnaujinimas, tikrinama skaitytaknyga.lt...");
+    setSyncMessage(syncQuery ? `Tikrinama skaitytaknyga.lt pagal paiešką: ${syncQuery}...` : "Vyksta atnaujinimas, tikrinama skaitytaknyga.lt...");
 
     try {
-      const response = await fetch("/api/skaitytaknyga/products", { cache: "no-store" });
+      const response = await fetch(`/api/skaitytaknyga/products${syncQuery ? `?search=${encodeURIComponent(syncQuery)}` : ""}`, { cache: "no-store" });
       if (!response.ok) throw new Error(`Nepavyko pasiekti skaitytaknyga.lt (${response.status})`);
       const data = await response.json() as { total: number; products: WpProduct[] };
       if (!Array.isArray(data.products)) throw new Error("WP grąžino netinkamą produktų formatą");
@@ -1056,6 +1058,7 @@ export default function Home() {
       for (let index = 0; index < nextBooks.length; index += 1) {
         const book = nextBooks[index];
         if (isReviewBook(book) || syncedKeys.has(titleKey(book.title))) continue;
+        if (syncQueryKey && !titleKey(book.title).includes(syncQueryKey)) continue;
         const wooListing = book.listings.find((listing) => listing.platform === "WooCommerce");
         if (!wooListing || wooListing.status === "neįkelta" || wooListing.status === "parduota") continue;
         nextBooks[index] = {
@@ -1085,7 +1088,11 @@ export default function Home() {
         })
         .filter(Boolean) as ListingPresence[];
 
-      setSyncMessage(`WP atnaujinta: rasta ${wpFound}, naujai įrašyta ${importedCount}. Sena.lt pildoma tik rankiniu importu.`);
+      setSyncMessage(
+        syncQuery
+          ? `WP paieška atnaujinta: "${syncQuery}", rasta ${wpFound}, naujai įrašyta ${importedCount}.`
+          : `WP atnaujinta: rasta ${wpFound}, naujai įrašyta ${importedCount}. Sena.lt pildoma tik rankiniu importu.`,
+      );
       syncOk = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Nežinoma klaida";
@@ -1121,8 +1128,10 @@ export default function Home() {
         {
           id: crypto.randomUUID(),
           kind: "reminder",
-          title: "WP sekimas atnaujintas",
-          detail: `Patikrinta skaitytaknyga.lt. WP rasta: ${wpFound}, naujai įrašyta: ${importedCount}. Sena.lt pildoma rankiniu importu.`,
+          title: syncQuery ? "WP paieška atnaujinta" : "WP sekimas atnaujintas",
+          detail: syncQuery
+            ? `Patikrinta skaitytaknyga.lt pagal paiešką "${syncQuery}". WP rasta: ${wpFound}, naujai įrašyta: ${importedCount}.`
+            : `Patikrinta skaitytaknyga.lt. WP rasta: ${wpFound}, naujai įrašyta: ${importedCount}. Sena.lt pildoma rankiniu importu.`,
           source: "Sekimas",
           due: "dabar",
           assignee: "Agne",

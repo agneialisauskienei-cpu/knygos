@@ -38,13 +38,16 @@ function stockQuantity(product: StoreProduct) {
   return undefined;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const search = new URL(request.url).searchParams.get("search")?.trim() ?? "";
   const products: StoreProduct[] = [];
   let total = 0;
   let totalPages = 1;
 
   async function fetchPage(page: number) {
-    const url = `https://skaitytaknyga.lt/wp-json/wc/store/products?per_page=100&page=${page}`;
+    const params = new URLSearchParams({ per_page: "100", page: String(page) });
+    if (search) params.set("search", search);
+    const url = `https://skaitytaknyga.lt/wp-json/wc/store/products?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
         accept: "application/json",
