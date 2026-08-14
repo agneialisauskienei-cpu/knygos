@@ -1003,11 +1003,13 @@ export default function Home() {
       if (!Array.isArray(data.products)) throw new Error("WP grąžino netinkamą produktų formatą");
       wpFound = data.total || data.products.length || books.length;
       const syncedBooks = new Map<string, Book>();
+      const syncedKeys = new Set<string>();
       const byTitle = new Map(books.map((book) => [titleKey(book.title), book]));
       const nextBooks = [...books];
 
       for (const product of data.products.filter((entry) => entry.title)) {
         const key = titleKey(product.title);
+        syncedKeys.add(key);
         let book = byTitle.get(key);
         if (!book) {
           book = {
@@ -1049,6 +1051,20 @@ export default function Home() {
           byTitle.set(key, book);
         }
         syncedBooks.set(key, book);
+      }
+
+      for (let index = 0; index < nextBooks.length; index += 1) {
+        const book = nextBooks[index];
+        if (isReviewBook(book) || syncedKeys.has(titleKey(book.title))) continue;
+        const wooListing = book.listings.find((listing) => listing.platform === "WooCommerce");
+        if (!wooListing || wooListing.status === "neįkelta" || wooListing.status === "parduota") continue;
+        nextBooks[index] = {
+          ...book,
+          stock: 0,
+          listings: book.listings.map((listing) =>
+            listing.platform === "WooCommerce" ? { ...listing, status: "parduota" } : listing,
+          ),
+        };
       }
 
       setBooksState(nextBooks);
