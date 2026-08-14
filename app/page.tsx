@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { booksSeed } from "./books-data";
 import { senaSales } from "./sena-sales";
 import { agneali1990VintedSales } from "./vinted-agneali1990-sales";
@@ -134,6 +134,13 @@ type SaleImportRow = {
   salePrice: number;
   platform: Platform;
   source: SourceKey;
+};
+
+type AppStatePayload = {
+  books?: Book[];
+  sales?: Sale[];
+  listingPresence?: ListingPresence[];
+  unmatchedListings?: UnmatchedListing[];
 };
 
 const salesSeed: Sale[] = [
@@ -660,6 +667,58 @@ export default function Home() {
   const [syncMessage, setSyncMessage] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [filterMessage, setFilterMessage] = useState("");
+  const [remoteStateLoaded, setRemoteStateLoaded] = useState(false);
+  const [remoteStateEnabled, setRemoteStateEnabled] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadRemoteState() {
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error("Nepavyko nuskaityti duomenų bazės");
+        const result = await response.json() as { configured: boolean; data: AppStatePayload | null };
+        if (cancelled) return;
+        setRemoteStateEnabled(result.configured);
+        if (result.data?.books?.length) {
+          const mergedBooks = mergeBooksWithSeed(result.data.books);
+          setBooksState(mergedBooks);
+          persistBooks(mergedBooks);
+        }
+        if (result.data?.sales?.length) {
+          setSalesState(result.data.sales);
+          persistSales(result.data.sales);
+        }
+        if (result.data?.listingPresence) {
+          setListingPresence(result.data.listingPresence);
+          persistListingPresence(result.data.listingPresence);
+        }
+        if (result.data?.unmatchedListings) {
+          setUnmatchedListings(result.data.unmatchedListings);
+          persistUnmatchedListings(result.data.unmatchedListings);
+        }
+      } catch {
+        if (!cancelled) setRemoteStateEnabled(false);
+      } finally {
+        if (!cancelled) setRemoteStateLoaded(true);
+      }
+    }
+    loadRemoteState();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!remoteStateLoaded || !remoteStateEnabled) return;
+    const timeout = window.setTimeout(() => {
+      fetch("/api/state", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ books, sales, listingPresence, unmatchedListings }),
+      }).catch(() => undefined);
+    }, 600);
+    return () => window.clearTimeout(timeout);
+  }, [books, sales, listingPresence, unmatchedListings, remoteStateLoaded, remoteStateEnabled]);
 
   const stats = useMemo(() => {
     const month = sales.filter((sale) => sale.soldAt.startsWith("2026-08"));
