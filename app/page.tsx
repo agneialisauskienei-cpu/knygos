@@ -109,6 +109,7 @@ type WpProduct = {
   price: number;
   url: string;
   image: string;
+  storage?: string;
   stockStatus: string;
   stockQuantity?: number;
 };
@@ -1025,7 +1026,7 @@ export default function Home() {
             title: product.title,
             image: product.image || "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80",
             stock: wpProductStock(product),
-            storage: "skaitytaknyga.lt",
+            storage: product.storage || "skaitytaknyga.lt",
             acquiredAt: new Date().toISOString().slice(0, 10),
             purchasePrice: undefined,
             recommendedPrice: product.price || 5,
@@ -1043,8 +1044,10 @@ export default function Home() {
           const hasWooListing = book.listings.some((listing) => listing.platform === "WooCommerce");
           book = {
             ...book,
-            image: book.image || product.image,
+            title: product.title || book.title,
+            image: product.image || book.image,
             stock: wpProductStock(product, book.stock),
+            storage: product.storage || book.storage,
             recommendedPrice: product.price || book.recommendedPrice,
             listings: hasWooListing
               ? book.listings.map((listing) =>

@@ -5,6 +5,7 @@ type StoreProduct = {
   name?: string;
   permalink?: string;
   images?: { src?: string }[];
+  categories?: { name?: string }[];
   prices?: {
     price?: string;
     currency_minor_unit?: number;
@@ -43,10 +44,11 @@ export async function GET(request: Request) {
   const products: StoreProduct[] = [];
   let total = 0;
   let totalPages = 1;
+  let activeSearch = search;
 
   async function fetchPage(page: number) {
     const params = new URLSearchParams({ per_page: "100", page: String(page) });
-    if (search) params.set("search", search);
+    if (activeSearch) params.set("search", activeSearch);
     const url = `https://skaitytaknyga.lt/wp-json/wc/store/products?${params.toString()}`;
     const response = await fetch(url, {
       headers: {
@@ -73,6 +75,15 @@ export async function GET(request: Request) {
       const batches = await Promise.all(pages.map((pageNumber) => fetchPage(pageNumber)));
       products.push(...batches.flat());
     }
+    if (!products.length && search) {
+      const fallbackSearch = search.split(/\s+/).find((word) => word.length >= 4);
+      if (fallbackSearch && fallbackSearch !== search) {
+        activeSearch = fallbackSearch;
+        total = 0;
+        totalPages = 1;
+        products.push(...await fetchPage(1));
+      }
+    }
   } catch {
     return NextResponse.json({ error: "Skaitytaknyga.lt katalogo pasiekti nepavyko" }, { status: 502 });
   }
@@ -85,6 +96,7 @@ export async function GET(request: Request) {
       price: productPrice(product),
       url: product.permalink ?? "",
       image: product.images?.[0]?.src ?? "",
+      storage: product.categories?.map((category) => category.name).filter(Boolean).join(" > ") || "skaitytaknyga.lt",
       stockStatus: stockStatus(product),
       stockQuantity: stockQuantity(product),
     })),
