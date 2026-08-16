@@ -589,7 +589,6 @@ function hasActiveListing(book: Book, source: SourceKey, presence: ListingPresen
   if (tracked) return true;
   if (source === "wp") return book.listings.some((listing) => listing.platform === "WooCommerce" && listing.status !== "neįkelta");
   if (source === "sena") return book.listings.some((listing) => listing.platform === "Sena.lt" && listing.status !== "neįkelta");
-  if (source.startsWith("vinted")) return book.listings.some((listing) => listing.platform === "Vinted" && listing.status !== "neįkelta");
   return false;
 }
 
@@ -2967,7 +2966,7 @@ function BookRow({
       ? book.listings.find((listing) => listing.platform === "WooCommerce")
       : source.key === "sena"
         ? book.listings.find((listing) => listing.platform === "Sena.lt")
-        : book.listings.find((listing) => listing.platform === "Vinted");
+        : undefined;
     return {
       source,
       status: tracked?.status ?? local?.status ?? "neįkelta",
