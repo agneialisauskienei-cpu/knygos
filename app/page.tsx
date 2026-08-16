@@ -455,20 +455,47 @@ function wpBookId(productId: number) {
   return `woo-${productId}`;
 }
 
+function isDraftishStatus(status: string) {
+  const key = titleKey(status);
+  return key.includes("juodra") || key.includes("draft");
+}
+
+function normalizeBookWithSeed(book: Book, seed?: Book) {
+  if (!seed) return book;
+  const seedWoo = seed.listings.find((listing) => listing.platform === "WooCommerce");
+  if (!seedWoo) return book;
+  return {
+    ...book,
+    stock: isDraftishStatus(book.listings.find((listing) => listing.platform === "WooCommerce")?.status ?? "") && seed.stock > 0 ? seed.stock : book.stock,
+    recommendedPrice: book.recommendedPrice > 0 ? book.recommendedPrice : seed.recommendedPrice,
+    storage: book.storage && book.storage !== "Visos prekės" ? book.storage : seed.storage,
+    image: book.image || seed.image,
+    listings: book.listings.map((listing) => {
+      if (listing.platform !== "WooCommerce") return listing;
+      if (!isDraftishStatus(listing.status) && listing.price > 0) return listing;
+      return {
+        ...listing,
+        status: seedWoo.status === "parduota" ? "parduota" : "aktyvu",
+        price: listing.price > 0 ? listing.price : seedWoo.price,
+      };
+    }),
+  };
+}
+
 function mergeBooksWithSeed(storedBooks: Book[]) {
   const seedById = new Map((booksSeed as Book[]).map((book) => [book.id, book]));
   const seedByTitle = new Map((booksSeed as Book[]).map((book) => [titleKey(book.title), book]));
   const merged = storedBooks.map((book) => {
     const seed = seedById.get(book.id) ?? seedByTitle.get(titleKey(book.title));
     if (!seed) return book;
-    return {
+    return normalizeBookWithSeed({
       ...seed,
       ...book,
       listings: book.listings.map((listing) => {
         const seedListing = seed.listings.find((entry) => entry.platform === listing.platform);
         return seedListing ? { ...seedListing, ...listing, sales: Math.max(seedListing.sales, listing.sales) } : listing;
       }),
-    };
+    }, seed);
   });
   const existingIds = new Set(merged.map((book) => book.id));
   return [...merged, ...(booksSeed as Book[]).filter((book) => !existingIds.has(book.id))];

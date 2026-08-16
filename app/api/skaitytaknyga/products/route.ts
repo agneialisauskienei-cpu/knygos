@@ -164,7 +164,7 @@ async function fetchWooProducts(search: string) {
   const auth = Buffer.from(`${wooKey}:${wooSecret}`).toString("base64");
 
   async function fetchPage(page: number) {
-    const params = new URLSearchParams({ per_page: "100", page: String(page), status: "any" });
+    const params = new URLSearchParams({ per_page: "100", page: String(page), status: "publish" });
     if (activeSearch) params.set("search", activeSearch);
     const url = `${baseUrl}/wp-json/wc/v3/products?${params.toString()}`;
     const response = await fetch(url, {
